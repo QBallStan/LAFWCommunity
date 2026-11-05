@@ -237,7 +237,11 @@ function Me:Open()
         local before = { c[1], c[2], c[3] }
         local hadOwn = A.db.chatColor ~= nil
         local picker = ColorPickerFrame
-        if not picker then return end
+        if not picker and C_AddOns and C_AddOns.LoadAddOn then
+            pcall(C_AddOns.LoadAddOn, "Blizzard_ColorPicker")
+            picker = ColorPickerFrame
+        end
+        if not picker then A:Message("The game's color picker isn't available."); return end
         local function Current() return picker:GetColorRGB() end
         local function Cancel()
             if hadOwn then SetColor(before[1], before[2], before[3])
@@ -254,6 +258,9 @@ function Me:Open()
             picker:SetColorRGB(c[1], c[2], c[3])
             ShowUIPanel(picker)
         end
+        -- Our window sits on the same layer as the picker and would hide it.
+        if picker.SetFrameStrata then picker:SetFrameStrata("FULLSCREEN_DIALOG") end
+        if picker.Raise then picker:Raise() end
     end)
     swatch:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")

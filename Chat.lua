@@ -1,23 +1,23 @@
 local _, A = ...
 -- Colors this addon gave the community chat before, replaced once unless
--- you've recolored it since: purple (0.1-0.5, too close to whispers), then
--- mint (0.6-0.7, too close to guild).
-local OLD_COLORS={ {.72,.48,1}, {.55,.95,.70} }
--- The community chat color: a warm gold-tan, chosen against every default
--- chat color of the Forever client with CIEDE2000 (how different two colors
--- look). Nearest defaults: pet battle log 17, honor 18, raid and instance
--- orange 18; guild 39, whispers 53 (10+ is a plainly visible difference).
--- If your own chat colors sit close to it, the most distinct of the others
--- is used instead.
-local PREFERRED={200/255,160/255,95/255}
+-- you've recolored it since: purple (0.1-0.5, too close to whispers), mint
+-- (0.6-0.7.6, too close to guild), tan (0.7.7-0.8.1).
+local OLD_COLORS={ {.72,.48,1}, {.55,.95,.70}, {200/255,160/255,95/255} }
+-- The community chat color: gold #C8A500 (the guild leader's choice). Against
+-- the Forever client's default chat colors (CIEDE2000, how different two
+-- colors look; 10+ is plainly visible): honor gains 10, boss emotes 14,
+-- system 22, raid 25, guild 35, whispers 68. If one of your own chat colors
+-- sits really close to it, the most distinct of the others is used instead.
+local PREFERRED={200/255,165/255,0}
 local CANDIDATES={
     PREFERRED,
+    {200/255,160/255,95/255},    -- tan
     {60/255,185/255,155/255},    -- jade
     {0,185/255,195/255},         -- deep cyan
     {1,190/255,145/255},         -- peach
     {1,125/255,170/255},         -- rose
 }
-local CLEAR=12   -- below this ΔE the preferred color is too close to one of yours
+local CLEAR=8    -- below this ΔE the preferred color is too close to one of yours
 local function ClubLinks(clubId)
     return A.db and A.db.links and A.db.links[tostring(clubId)] or {}
 end
@@ -97,17 +97,19 @@ end
 -- key ("club:stream"), channel number, chat type ("CHANNEL6").
 function A:CommunityChannels()
     local list={}
-    if not self.db or not self.db.clubId or not C_Club or not C_Club.GetStreams then return list end
-    local ok,streams=pcall(C_Club.GetStreams,self.db.clubId)
+    -- The community chosen for chat in the settings, else the LAFW tab's.
+    local clubId=(self.CommunityChat and self.CommunityChat:ClubId()) or (self.db and self.db.clubId)
+    if not self.db or not clubId or not C_Club or not C_Club.GetStreams then return list end
+    local ok,streams=pcall(C_Club.GetStreams,clubId)
     if not ok or type(streams)~="table" then return list end
     for _,stream in ipairs(streams) do
         local channelName
         if ChatFrameUtil and ChatFrameUtil.GetCommunitiesChannelName then
-            channelName=ChatFrameUtil.GetCommunitiesChannelName(self.db.clubId,stream.streamId)
+            channelName=ChatFrameUtil.GetCommunitiesChannelName(clubId,stream.streamId)
         end
         local channelId=channelName and GetChannelName(channelName)
         if type(channelId)=="number" and channelId>0 then
-            list[#list+1]={key=tostring(self.db.clubId)..":"..tostring(stream.streamId),
+            list[#list+1]={key=tostring(clubId)..":"..tostring(stream.streamId),
                 channelId=channelId,chatType="CHANNEL"..channelId}
         end
     end
@@ -122,7 +124,7 @@ function A:ApplyCommunityColor(c)
         local color=c or self:CommunityColor(ch.chatType)
         if ChatTypeInfo[ch.chatType] then
             ChangeChatColor(ch.chatType,color[1],color[2],color[3])
-            self.db.chatColors[ch.key]={channelId=ch.channelId,v=3,applied={color[1],color[2],color[3]}}
+            self.db.chatColors[ch.key]={channelId=ch.channelId,v=4,applied={color[1],color[2],color[3]}}
         end
     end
 end
@@ -140,7 +142,7 @@ function A:ColorCommunityChat()
             local moved=not previous or previous.channelId~=ch.channelId
             -- Before 0.7.8: a color this addon set is replaced once; a color
             -- you set by hand becomes your color.
-            local old=previous and not moved and (previous.v or 0)<3
+            local old=previous and not moved and (previous.v or 0)<4
             local stillOurs=false
             if old then for _,c in ipairs(OLD_COLORS) do if Near(info.r,info.g,info.b,c) then stillOurs=true end end end
             if old and not stillOurs and not self.db.chatColor then self.db.chatColor={info.r,info.g,info.b} end
@@ -151,7 +153,9 @@ function A:ColorCommunityChat()
             if moved or stillOurs or (old and not previous.applied) then
                 local c=self:CommunityColor(ch.chatType)
                 ChangeChatColor(ch.chatType,c[1],c[2],c[3])
-                self.db.chatColors[ch.key]={channelId=ch.channelId,v=3,applied={c[1],c[2],c[3]}}
+                self.db.chatColors[ch.key]={channelId=ch.channelId,v=4,applied={c[1],c[2],c[3]}}
+            elseif previous and old then
+                previous.v=4
             end
         end
     end
