@@ -187,6 +187,41 @@ function BN:FriendCharacter(bnetAccountID, battleTag)
     end
 end
 
+-- A Battle.net friend's account info, found by account ID or BattleTag.
+function BN:FriendInfo(bnetAccountID, battleTag)
+    if not C_BattleNet then return nil end
+    bnetAccountID = Num(bnetAccountID)
+    if bnetAccountID and bnetAccountID ~= 0 then
+        local info = Call(C_BattleNet.GetAccountInfoByID, bnetAccountID)
+        if type(info) == "table" then return info end
+    end
+    if not TagKeys(battleTag) then return nil end
+    for i = 1, (Call(BNGetNumFriends) or 0) do
+        local info = Call(C_BattleNet.GetFriendAccountInfo, i)
+        if info and SameTag(info.battleTag, battleTag) then return info end
+    end
+end
+
+-- Where a Battle.net friend is: "forever" (in this same game), "elsewhere"
+-- (online in another game, another WoW, or the Battle.net app), or nil
+-- (not a friend, or offline).
+function BN:FriendWhere(bnetAccountID, battleTag)
+    local info = self:FriendInfo(bnetAccountID, battleTag)
+    if type(info) ~= "table" then return nil end
+    local game = info.gameAccountInfo
+    local online = type(game) == "table" and Safe(game.isOnline)
+    if online then
+        local program = Str(game.clientProgram)
+        local project = Num(game.wowProjectID)
+        local isWoW = program == (BNET_CLIENT_WOW or "WoW")
+        if isWoW and (not WOW_PROJECT_ID or not project or project == WOW_PROJECT_ID) then return "forever" end
+        return "elsewhere"
+    end
+    -- Online on Battle.net without a game.
+    if Safe(info.isOnline) or (type(game) == "table" and Str(game.clientProgram) == "BSAp") then return "elsewhere" end
+    return nil
+end
+
 -- Returns character, source ("self" / "friend" / "addon"), main (nil when
 -- unknown, or when they are on their main).
 -- The group's own entry for this sender: found by account ID, else by name.

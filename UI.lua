@@ -79,6 +79,16 @@ local function OneLine(fs, text, width)
     fs:SetWordWrap(false); fs:SetWidth(width); fs:SetText(text)
 end
 
+-- Status colors: online in Forever (green), online elsewhere (blue: another
+-- game, another WoW, the Battle.net app), offline (grey).
+local STATUS = { online = { .2, 1, .4 }, elsewhere = { .35, .65, 1 }, offline = { .6, .6, .6 } }
+local function Status(r)
+    if not r.online then return STATUS.offline end
+    if r.elsewhere then return STATUS.elsewhere end
+    return STATUS.online
+end
+A.StatusColor = Status
+
 function A:Draw()
     local f=self.window
     if not f then return end
@@ -131,7 +141,7 @@ function A:Draw()
             card.name:ClearAllPoints(); card.name:SetPoint("TOPLEFT",card,"TOPLEFT",60,-6)
             -- 60 to the faction icon at 195, less a little gap.
             NameWithTag(card,card.name,card.role,display.name,nil,130)
-            card.name:SetTextColor(display.online and .2 or .6,display.online and 1 or .6,display.online and .4 or .6)
+            card.name:SetTextColor(unpack(Status(display)))
             card.level:SetText("Lvl "..(display.level or "?"))
             card.name:SetFont(STANDARD_TEXT_FONT,11,"")
             card.mainLabel=card.mainLabel or Text(card,11,0,0,240)
@@ -147,7 +157,10 @@ function A:Draw()
             local cardW=card:GetWidth() or 540
             OneLine(card.detail,(display.class or "?").." - "..(display.professions or "Professions unknown"),
                 math.max(80,cardW-DETAIL_X-(#alts>0 and 64 or 16)))
-            card.dot:SetVertexColor(row.groupOnline and .2 or .5,row.groupOnline and .8 or .5,row.groupOnline and .5 or .5)
+            do
+                local c=Status(row.groupOnline and (row.online and row or {online=true}) or {online=false})
+                card.dot:SetVertexColor(c[1]*.9,c[2]*.85,c[3]*.9)
+            end
             card.arrow:SetText((#alts>0 and #alts.." alts  " or "")..(expanded and "-" or "+"))
             if card.altLines then for _,line in ipairs(card.altLines) do line:Hide() end end
             card.expansion:SetShown(expanded and true or false)
@@ -301,7 +314,14 @@ function A:BuildWindow()
         end)
         card:SetScript("OnEnter",function(self)
             self:SetBackdropColor(.7,.7,.7,.12)
-            GameTooltip:SetOwner(self,"ANCHOR_RIGHT"); GameTooltip:SetText(self.row and (self.row.online==true and "Online" or self.row.online==false and "Offline" or "Status unknown") or "")
+            local r0=self.row
+            local status=not r0 and "" or (r0.online==true and (r0.elsewhere and ("Online, "..(r0.elsewhereWhy or "not in Forever"))
+                or (r0.elsewhere==false and "Online in Forever" or (r0.battleTag and "Online (game unknown)" or "Online")))
+                or (r0.online==false and "Offline" or "Status unknown"))
+            GameTooltip:SetOwner(self,"ANCHOR_RIGHT"); GameTooltip:SetText(status)
+            if r0 and r0.online then
+                local c=Status(r0); GameTooltipTextLeft1:SetTextColor(c[1],c[2],c[3])
+            end
             local row=self.row
             if row then
                 if row.role=="alt" and row.mainName then GameTooltip:AddLine("Alt of "..row.mainName,1,.82,0)

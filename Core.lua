@@ -118,12 +118,42 @@ function A:FillBattleNetRow(row, info, clubId)
             if char and not main and p.onMain then row.role = "main" end
         end
     end
+    -- Online but not in Forever: on the Battle.net phone app, a friend in
+    -- another game (or another WoW), or a member whose addon has gone quiet.
+    -- Someone we can't place stays plain online.
+    row.elsewhere = nil
+    if row.online and info.isSelf ~= true then
+        local presence = Enum and Enum.ClubMemberPresence
+        local where = BN:FriendWhere(info.bnetAccountId, info.name)
+        local inForever = self.Sync and self.Sync:InForever(info.name)
+        if presence and presence.OnlineMobile and info.presence == presence.OnlineMobile then
+            row.elsewhere, row.elsewhereWhy = true, "on the Battle.net app"
+        elseif where == "forever" or inForever == true then
+            row.elsewhere = false
+        elseif where == "elsewhere" then
+            row.elsewhere, row.elsewhereWhy = true, "in another game"
+        elseif inForever == false then
+            row.elsewhere, row.elsewhereWhy = true, "not in Forever"
+        end
+    elseif info.isSelf == true then
+        row.elsewhere = false
+    end
     row.bnAlts = {}
     for _, o in ipairs(others or {}) do
         row.bnAlts[#row.bnAlts + 1] = { name = BN:Shown(o.name), role = o.isMain and "main" or nil,
             class = ClassName(o.class), level = o.level, professions = o.profs,
             faction = o.faction or row.faction, online = false, memberId = row.memberId .. ":" .. o.name }
     end
+end
+
+-- Who's in Forever changes as members' addons go quiet: repaint the open
+-- tab now and then.
+if C_Timer and C_Timer.NewTicker then
+    C_Timer.NewTicker(60, function()
+        if A.window and A.window:IsShown() and A.db and A.db.clubId then
+            pcall(function() A:Refresh(); A:Draw() end)
+        end
+    end)
 end
 
 -- Names changed (a setting, your main, or a member announcing): repaint

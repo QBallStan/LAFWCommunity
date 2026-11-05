@@ -16,6 +16,12 @@ A.Sync = Sync
 local PREFIX = "LAFW1"
 local CHANNEL = "LAFWsync"
 local ANSWER_GAP = 30          -- seconds between two answers to "who's there"
+local PING_EVERY = 300         -- "still here in Forever", every 5 minutes
+local PING_GRACE = 60          -- a ping may be this late before we stop counting on it
+
+-- When each member's addon last spoke this session (GetTime). The addon
+-- only runs in Forever, so hearing from it means they're playing Forever.
+Sync.seen = {}
 
 Sync.stats = { sent = 0, heard = 0, rejected = 0, byFaction = {} }
 
@@ -72,11 +78,22 @@ function Sync:ChannelId()
     return type(id) == "number" and id > 0 and id or nil
 end
 
+-- In the channel (already, after a /reload, or once joined): say who we are
+-- and ask who's there, then keep saying we're here every PING_EVERY seconds.
+function Sync:Ready()
+    HideFromChatWindows()
+    self.joinedAt = GetTime()
+    self:Announce(true)
+    if not self.ticker and C_Timer.NewTicker then
+        self.ticker = C_Timer.NewTicker(PING_EVERY, function() Sync:Ping() end)
+    end
+end
+
 function Sync:Join()
-    if self:ChannelId() then HideFromChatWindows(); return true end
+    if self:ChannelId() then self:Ready(); return true end
     Call(JoinTemporaryChannel, CHANNEL)
     C_Timer.After(2, function()
-        if Sync:ChannelId() then HideFromChatWindows(); Sync:Announce(true) end
+        if Sync:ChannelId() then Sync:Ready() end
     end)
 end
 
@@ -86,6 +103,7 @@ end
 --      who you are now. Char and Main are full names; Main is empty on the
 --      main or with no main for this server. 0.2 stops after Ask, 0.3-0.6
 --      after Main.
+--   P  "P\tTag" every 5 minutes: still here (in Forever).
 --   A  "A\tTag\tSeq\tName\tProfs\tClass\tLevel\tIsMain"
 --      one of your other characters on this server, sent after an H with
 --      the same Seq. A new Seq replaces the list.
@@ -148,6 +166,7 @@ end
 function Sync:OnMessage(text, sender)
     local kind = text:sub(1, 1)
     if kind == "A" then return self:OnOther(text) end
+    if kind == "P" then return self:OnPing(text) end
     local _, tag, char, realm, faction, ask, main, profs, class, level, seq, onMain = strsplit("\t", text)
     if kind ~= "H" then return end
     local full = A.BN.TagKeys(tag)
@@ -165,6 +184,9 @@ function Sync:OnMessage(text, sender)
     -- A new announcement starts a new list of their other characters.
     if seq and seq ~= "" and (not before or before.seq ~= seq) then entry.others = {} end
     Peers()[full] = entry
+    local wasSeen = self:InForever(tag)
+    self.seen[full] = GetTime()
+    if wasSeen ~= true then A:NamesChanged() end
     self.stats.heard = self.stats.heard + 1
     if faction and faction ~= "" then
         self.stats.byFaction[faction] = (self.stats.byFaction[faction] or 0) + 1
@@ -188,6 +210,7 @@ function Sync:OnOther(text)
     if not p or not name or p.seq ~= seq then self.stats.rejected = self.stats.rejected + 1; return end
     if #p.others >= MAX_OTHERS then return end
     for _, o in ipairs(p.others) do if o.name == name then return end end
+    self.seen[full] = GetTime()
     p.others[#p.others + 1] = { name = name, profs = CleanText(profs), class = CleanClass(class),
         level = CleanLevel(level), isMain = isMain == "1" }
     A:NamesChanged()
@@ -196,6 +219,46 @@ end
 -- What a member's addon told us: their current character and its details,
 -- and their other characters on that server.
 function Sync:Peer(battleTag) return Find(battleTag) end
+
+-- "P\tTag": still here.
+function Sync:Ping()
+    local _, tag = A.BN:Self()
+    if tag and self:ChannelId() then self:Send("P\t" .. tag) end
+end
+
+function Sync:OnPing(text)
+    local _, tag = strsplit("\t", text)
+    local full = A.BN.TagKeys(tag)
+    if not full then return end
+    local _, selfTag = A.BN:Self()
+    if selfTag and A.BN.SameTag(selfTag, tag) then return end
+    local was = self:InForever(tag)
+    self.seen[full] = GetTime()
+    -- Someone we have no details for yet: ask.
+    if not Peers()[full] and (not self.lastAnnounce or GetTime() - self.lastAnnounce > ANSWER_GAP) then
+        self:Announce(true)
+    end
+    if was ~= true then A:NamesChanged() end
+end
+
+-- Is this member playing Forever right now, as far as their addon tells?
+-- true: heard lately. false: they run the addon but have been quiet too long.
+-- nil: no way to tell (no addon, or we only just arrived ourselves).
+function Sync:InForever(battleTag)
+    if not battleTag then return nil end
+    local now = GetTime()
+    for key, at in pairs(self.seen) do
+        if A.BN.SameTag(key, battleTag) then
+            if now - at <= PING_EVERY + PING_GRACE then return true end
+            return false
+        end
+    end
+    if not Find(battleTag) then return nil end
+    -- A member known to run the addon who hasn't spoken: give them time to
+    -- answer our "who's there" first.
+    if not self.joinedAt or now - self.joinedAt < PING_GRACE then return nil end
+    return false
+end
 
 local events = CreateFrame("Frame")
 events:RegisterEvent("PLAYER_LOGIN")
