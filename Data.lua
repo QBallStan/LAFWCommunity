@@ -11,7 +11,11 @@
 --     your other characters on this server) when that changes: a new
 --     character, a new main, a level or a skill up (those at most every 10
 --     minutes), or when you press "Share now" in the settings;
---   - reads everyone's lines, from the channel's history at login and live;
+--   - reads everyone's lines as they're posted. The game hides group message
+--     text from addons except in chat events, so the channel is joined as a
+--     chat channel (kept out of the chat windows) and read from there; the
+--     channel's history only serves to remove your own old lines. What was
+--     heard is kept, so members seen before stay known while offline;
 --   - removes your own older lines, so the channel holds about one per member;
 --   - turns the channel's notifications off and keeps it marked as read, so
 --     nobody sees it unless they open it in the Communities window.
@@ -45,6 +49,7 @@ Data.parts = {}                  -- [memberKey] = { seq, n, got = {} }
 Data.online = {}                 -- [key] = false once seen going offline this session
 Data.seenIds = {}                -- lines already read
 Data.removing = {}               -- own old lines already queued for removal
+Data.ownSeen = {}                -- own lines already counted
 
 local function Call(fn, ...)
     if type(fn) ~= "function" then return nil end
@@ -167,7 +172,7 @@ function Data:Update(force, hello)
     if self.pendingPayload == payload then return end
     self.pendingPayload = payload
     -- A new number each post, so our own lines tell posts apart.
-    local seq = math.max(time(), (tonumber(self.ownSeq) or 0) + 1, (self.lastSeq or 0) + 1)
+    local seq = math.max(time(), (self.lastSeq or 0) + 1)
     self.lastSeq = seq
     seq = tostring(seq)
     local clubId, streamId = self.clubId, self.streamId
@@ -292,31 +297,42 @@ function Data:Note(info, live, result)
 end
 
 function Data:OnLine(info, live)
-    if type(info) ~= "table" then return end
-    if info.destroyed then return end
-    -- The same line can come again (history re-read): once is enough.
+    if type(info) ~= "table" or info.destroyed then return end
+    local author = info.author
+    if type(author) ~= "table" then self:Note(info, live, "no author"); return end
     local mk = MessageKey(info)
-    if mk then
-        if self.seenIds[mk] then return end
-        self.seenIds[mk] = true
+    local at = MessageTime(info) or time()
+    -- Ours: only the messages themselves matter (to remove old ones), and
+    -- that needs no text.
+    if author.isSelf == true then
+        if mk and self.ownSeen[mk] then return end
+        if mk then self.ownSeen[mk] = true end
+        self.stats.own = self.stats.own + 1
+        self.ownLines = self.ownLines or {}
+        self.ownLines[#self.ownLines + 1] = { id = info.messageId, at = at }
+        self:Note(info, live, "yours")
+        return
     end
-    local text, author = Str(info.content), info.author
-    if not text or type(author) ~= "table" then self:Note(info, live, "no text or author"); return end
+    -- The game hides group message text from addons ("|Kw12|k") everywhere
+    -- except in chat events, so only those lines can be read.
+    local text = Str(info.content)
+    if not text then self:Note(info, live, "no text"); return end
     local seq, i, n, chunk = text:match("^" .. TAG .. " (%d+) (%d+)/(%d+) (.*)$")
     i, n = tonumber(i), tonumber(n)
     if not seq or not i or not n or n > 10 or i > n then
-        self.stats.rejected = self.stats.rejected + 1
-        self:Note(info, live, "not an addon line")
+        if text:find("^|K") then
+            self.stats.hidden = (self.stats.hidden or 0) + 1
+            self:Note(info, live, "text hidden by the game")
+        else
+            self.stats.rejected = self.stats.rejected + 1
+            self:Note(info, live, "not an addon line")
+        end
         return
     end
-    local at = MessageTime(info) or time()
-    if author.isSelf then
-        self.stats.own = self.stats.own + 1
-        -- Our newest line stays; older ones go.
-        self.ownLines = self.ownLines or {}
-        self.ownLines[#self.ownLines + 1] = { id = info.messageId, at = at, seq = seq }
-        self:Note(info, live, "yours")
-        return
+    -- The same line can come again: once is enough.
+    if mk then
+        if self.seenIds[mk] then return end
+        self.seenIds[mk] = true
     end
     local memberId = author.memberId
     if type(memberId) ~= "number" or Secret(memberId) then self:Note(info, live, "no member ID (" .. type(memberId) .. ")"); return end
@@ -375,16 +391,8 @@ function Data:ReadHistory()
             end
         end
     end
-    -- Our own lines: keep the newest post (all its parts), remove the rest.
-    local newest = self.ownLatest
     for _, l in ipairs(self.ownLines or {}) do
-        if not newest or (tonumber(l.seq) or 0) > (tonumber(newest.seq) or 0) then newest = l end
-    end
-    if newest then self.ownLatest, self.ownSeq = newest, newest.seq end
-    self.ownCurrent, self.ownOld = {}, {}
-    for _, l in ipairs(self.ownLines or {}) do
-        if l.seq == self.ownSeq then table.insert(self.ownCurrent, l.id)
-        elseif not self.removing[MessageKey({ messageId = l.id }) or l] then table.insert(self.ownOld, l.id) end
+        if not self.ownLatest or l.at > self.ownLatest.at then self.ownLatest = l end
     end
     if not self.historyRead then
         self.historyRead = true
@@ -392,7 +400,7 @@ function Data:ReadHistory()
         local last = DB().postedAt[StreamKey(self.clubId, self.streamId)]
         if last and time() - last < HELLO_GAP then self:Update() else self:Update(true, true) end
     end
-    self:CleanUp()
+    self:OwnOld()
 end
 
 -------------------------------------------------------------------------------
@@ -407,6 +415,7 @@ function Data:Start()
     if not input and not InCombatLockdown() then pcall(MakeInput) end
     self:Quiet(clubId, streamId)
     if self.subscribed then
+        self:JoinChat()
         self:RequestHistory()
     else
         self:Subscribe()
@@ -427,8 +436,43 @@ function Data:Subscribe()
     Call(C_Club.FocusStream, self.clubId, self.streamId)
 end
 
+-- Lines can only be read from chat events, which come for channels you're
+-- in as a chat channel: join it as one, and keep it out of the chat windows
+-- (once; after that, showing it in a window is up to you).
+function Data:JoinChat()
+    if not self.clubId or self.chatJoined then return end
+    self.chatJoined = true
+    Call(C_Club.AddClubStreamChatChannel, self.clubId, self.streamId)
+    local d, key = DB(), StreamKey(self.clubId, self.streamId)
+    d.hidden = d.hidden or {}
+    if d.hidden[key] then return end
+    d.hidden[key] = true
+    C_Timer.After(2, function()
+        for i = 1, (NUM_CHAT_WINDOWS or 10) do
+            local frame = _G["ChatFrame" .. i]
+            if frame and ChatFrameUtil and ChatFrameUtil.RemoveCommunitiesChannel then
+                pcall(ChatFrameUtil.RemoveCommunitiesChannel, frame, Data.clubId, Data.streamId, true)
+            elseif frame and ChatFrame_RemoveCommunitiesChannel then
+                pcall(ChatFrame_RemoveCommunitiesChannel, frame, Data.clubId, Data.streamId, true)
+            end
+        end
+    end)
+end
+
+-- A line in a group channel, as chat sees it: here the text is readable.
+function Data:OnChat(text)
+    if not self.clubId or type(text) ~= "string" or Secret(text) then return end
+    local info, clubId, streamId = Call(C_Club.GetInfoFromLastCommunityChatLine)
+    if clubId ~= self.clubId or streamId ~= self.streamId or type(info) ~= "table" then return end
+    self.stats.chatLines = (self.stats.chatLines or 0) + 1
+    local line = { messageId = info.messageId, author = info.author, content = text }
+    if type(line.author) == "table" and line.author.isSelf == true then self:OnOwnLine(line) else self:OnLine(line, true) end
+    self:MarkRead()
+end
+
 function Data:OnSubscribed()
     self.subscribed = true
+    self:JoinChat()
     if self.subscribing then
         self.subscribing = nil
         -- Leave it focused if the Communities window is showing it.
@@ -463,6 +507,7 @@ events:RegisterEvent("CLUB_MESSAGE_HISTORY_RECEIVED")
 events:RegisterEvent("CLUB_STREAM_SUBSCRIBED")
 events:RegisterEvent("CLUB_STREAM_UNSUBSCRIBED")
 events:RegisterEvent("CLUB_ERROR")
+events:RegisterEvent("CHAT_MSG_COMMUNITIES_CHANNEL")
 events:RegisterEvent("CLUB_MEMBER_PRESENCE_UPDATED")
 events:RegisterEvent("ADDON_ACTION_BLOCKED")
 events:RegisterEvent("ADDON_ACTION_FORBIDDEN")
@@ -486,6 +531,8 @@ events:SetScript("OnEvent", function(_, event, a1, a2, a3)
             end
             Data:MarkRead()
         end
+    elseif event == "CHAT_MSG_COMMUNITIES_CHANNEL" then
+        pcall(Data.OnChat, Data, a1)
     elseif event == "CLUB_STREAM_SUBSCRIBED" then
         if a1 == Data.clubId and a2 == Data.streamId then pcall(Data.OnSubscribed, Data) end
     elseif event == "CLUB_STREAM_UNSUBSCRIBED" then
@@ -544,19 +591,24 @@ end
 
 -- One of our own lines arrived: a new post makes the previous one old.
 function Data:OnOwnLine(info)
-    local seq = Str(info.content) and info.content:match("^" .. TAG .. " (%d+) ")
-    if not seq then return end
-    self.ownLatest = { id = info.messageId, at = MessageTime(info) or time(), seq = seq }
-    local mk = MessageKey(info)
-    if mk then self.seenIds[mk] = true end
-    self.ownLines = self.ownLines or {}
-    table.insert(self.ownLines, self.ownLatest)
-    if seq ~= self.ownSeq then
-        self.ownOld = self.ownCurrent or {}
-        self.ownCurrent, self.ownSeq = {}, seq
-        self:CleanUp()
+    self:OnLine(info, true)
+    self:OwnOld()
+end
+
+-- Our own lines: the newest post stays (its parts go out within a couple of
+-- minutes of each other), everything older goes. Times are the game's own,
+-- so the computer's clock doesn't matter.
+function Data:OwnOld()
+    local newest
+    for _, l in ipairs(self.ownLines or {}) do if not newest or l.at > newest.at then newest = l end end
+    if not newest then return end
+    self.ownLatest = newest
+    self.ownOld = {}
+    for _, l in ipairs(self.ownLines) do
+        local k = MessageKey({ messageId = l.id }) or l
+        if l.at < newest.at - 120 and not self.removing[k] then table.insert(self.ownOld, l.id) end
     end
-    table.insert(self.ownCurrent, info.messageId)
+    if #self.ownOld > 0 then self:CleanUp() end
 end
 
 -- Something about you changed: post again. A level or skill up (auto) waits

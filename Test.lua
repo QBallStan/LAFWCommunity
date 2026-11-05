@@ -190,8 +190,9 @@ function A:Test()
         for f, n in pairs(ds.byFaction) do factions[#factions + 1] = f .. " " .. n end
         Say(("  heard %d member line(s)%s, %d rejected; answered %d hello(s)"):format(ds.heard,
             #factions > 0 and (" (" .. table.concat(factions, ", ") .. ")") or "", ds.rejected, ds.replies or 0))
-        Say(("  game events: %d new line(s) in the group (%d in LAFW data), %d history download(s), %d range(s) read"):format(
-            ds.liveEvents or 0, ds.liveOurs or 0, ds.historyEvents or 0, ds.ranges or 0))
+        Say(("  game events: %d new line(s) in the group (%d in LAFW data), %d readable through chat%s, %d hidden by the game, %d history download(s)"):format(
+            ds.liveEvents or 0, ds.liveOurs or 0, ds.chatLines or 0, D.chatJoined and "" or " (|cffff6060not joined as a chat channel|r)",
+            ds.hidden or 0, ds.historyEvents or 0))
         local dbg = self.db.data and self.db.data.debug or {}
         for k = 1, math.min(#dbg, 6) do
             local e = dbg[k]
