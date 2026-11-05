@@ -41,4 +41,4 @@ You shouldn't need them, but:
 
 ## For the maintainer
 
-Every addon file sits at the top of this repository. To publish a version: bump `## Version` in `LAFWCommunity.toc`, commit, then push a tag such as `v0.7.5`. The GitHub workflow builds `LAFWCommunity-v0.7.5-forever.zip` (the `LAFWCommunity` folder inside) and attaches it to a release, which is what WowUp installs.
+Every addon file sits at the top of this repository. To publish a version, bump `## Version` in `LAFWCommunity.toc` and push to `main`. The GitHub workflow then builds `LAFWCommunity-v<version>-forever.zip` (with the `LAFWCommunity` folder inside), tags the commit and publishes the release, which is what WowUp installs. It can also be run by hand from the Actions tab.

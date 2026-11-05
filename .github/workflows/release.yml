@@ -1,8 +1,13 @@
-# Builds the addon zip and publishes a release when a version tag (v*) is pushed.
+# Publishes a release whenever the version in LAFWCommunity.toc changes on
+# main (or when run by hand from the Actions tab): it builds
+# LAFWCommunity-v<version>-forever.zip, with the LAFWCommunity folder inside,
+# tags the commit v<version> and attaches the zip. WowUp installs from these.
 name: Release
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
+    paths: ["LAFWCommunity.toc"]
+  workflow_dispatch:
 permissions:
   contents: write
 jobs:
@@ -10,12 +15,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Read the version
+        id: v
+        run: |
+          version=$(sed -n 's/^## Version:[[:space:]]*//p' LAFWCommunity.toc | tr -d '\r[:space:]')
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
       - name: Build the zip
         run: |
           mkdir -p build/LAFWCommunity
           rsync -a --exclude '.git*' --exclude build ./ build/LAFWCommunity/
-          cd build && zip -r "LAFWCommunity-${GITHUB_REF_NAME}-forever.zip" LAFWCommunity
-      - name: Publish the release
+          cd build && zip -r "LAFWCommunity-${{ steps.v.outputs.tag }}-forever.zip" LAFWCommunity
+      - name: Publish the release (once per version)
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" "build/LAFWCommunity-${GITHUB_REF_NAME}-forever.zip" --title "$GITHUB_REF_NAME" --generate-notes
+          TAG: ${{ steps.v.outputs.tag }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists"; exit 0
+          fi
+          gh release create "$TAG" "build/LAFWCommunity-$TAG-forever.zip" \
+            --target "$GITHUB_SHA" --title "LAFW Community $TAG" --generate-notes
