@@ -35,6 +35,46 @@ local function Peers()
     return A.db.peers
 end
 
+-------------------------------------------------------------------------------
+-- Who is who. A Blizzard Group never shows addons a BattleTag: member names
+-- come as masked |Ks..|k codes that only the game can display. So each addon
+-- says which member it is in each group ("clubId:memberId"; member IDs
+-- belong to the group, the same for everyone), and that's how a member row
+-- is matched to what their addon told us.
+-------------------------------------------------------------------------------
+function Sync:MyMemberships()
+    local out = {}
+    local clubs = Call(C_Club and C_Club.GetSubscribedClubs) or {}
+    for _, club in ipairs(clubs) do
+        if club.clubId and A.BN:IsBattleNetClub(club.clubId) then
+            local me = Call(C_Club.GetMemberInfoForSelf, club.clubId)
+            local id = me and me.memberId
+            if type(id) == "number" then out[#out + 1] = club.clubId .. ":" .. id end
+        end
+    end
+    return table.concat(out, ",")
+end
+
+-- "1:2,3:4" -> { ["1"] = 2, ["3"] = 4 }
+local function ParseMemberships(text)
+    if type(text) ~= "string" or text == "" or #text > 400 then return nil end
+    local out, any = {}, false
+    for club, member in text:gmatch("(%d+):(%d+)") do out[club] = tonumber(member); any = true end
+    return any and out or nil
+end
+
+-- The peer key (BattleTag) of the member `info` in group `clubId`, if their
+-- addon has told us who they are there.
+function Sync:KeyFor(clubId, info)
+    if not A.db or type(info) ~= "table" or not clubId then return nil end
+    local memberId = info.memberId
+    if type(memberId) ~= "number" then return nil end
+    local club = tostring(clubId)
+    for key, entry in pairs(Peers()) do
+        if type(entry.clubs) == "table" and entry.clubs[club] == memberId then return key end
+    end
+end
+
 local function Find(battleTag)
     if not A.db or not battleTag then return nil end
     local full = A.BN.TagKeys(battleTag)
@@ -102,7 +142,8 @@ end
 --   H  "H\tTag\tChar\tRealm\tFaction\tAsk\tMain\tProfs\tClass\tLevel\tSeq\tOnMain"
 --      who you are now. Char and Main are full names; Main is empty on the
 --      main or with no main for this server. 0.2 stops after Ask, 0.3-0.6
---      after Main. 0.8.1 adds InviteName (how to invite them) after OnMain.
+--      after Main. 0.8.1 adds InviteName (how to invite them) after OnMain,
+--      0.8.3 Clubs ("clubId:memberId,..." for each Blizzard Group).
 --   P  "P\tTag" every 5 minutes: still here (in Forever).
 --   A  "A\tTag\tSeq\tName\tProfs\tClass\tLevel\tIsMain"
 --      one of your other characters on this server, sent after an H with
@@ -114,8 +155,17 @@ function Sync:Send(text)
     local id = self:ChannelId()
     if not id or not (C_ChatInfo and C_ChatInfo.SendAddonMessage) then return false end
     local ok, result = pcall(C_ChatInfo.SendAddonMessage, PREFIX, text, "CHANNEL", id)
-    if ok and result ~= false then self.stats.sent = self.stats.sent + 1; return true end
-    self.stats.lastSendError = ok and tostring(result) or "error"
+    -- Recent clients answer with a result code (0 = sent); older ones with true/false.
+    local success = Enum and Enum.SendAddonMessageResult and Enum.SendAddonMessageResult.Success or 0
+    if ok and (result == nil or result == true or result == success) then
+        self.stats.sent = self.stats.sent + 1; return true
+    end
+    self.stats.failed = (self.stats.failed or 0) + 1
+    local why = ok and tostring(result) or "error"
+    if ok and type(result) == "number" and Enum and Enum.SendAddonMessageResult then
+        for k, v in pairs(Enum.SendAddonMessageResult) do if v == result then why = k end end
+    end
+    self.stats.lastSendError = why
     return false
 end
 
@@ -164,7 +214,7 @@ function Sync:Announce(ask)
     self:Send(table.concat({ "H", tag, char, realm, faction, ask and "1" or "0", main,
         profs, classFile or "", tostring(UnitLevel("player") or ""), seq,
         (A.Me and A.Me:MainKey() and A.Me:MainKey() == A.Me:CurrentKey()) and "1" or "0",
-        Sync:InviteName() or "" }, "\t"))
+        Sync:InviteName() or "", Sync:MyMemberships() }, "\t"))
     -- Your other characters here, a few at a time so the game doesn't
     -- throttle them.
     local others = A.Me and A.Me:OthersHere() or {}
@@ -184,7 +234,7 @@ function Sync:OnMessage(text, sender)
     local kind = text:sub(1, 1)
     if kind == "A" then return self:OnOther(text) end
     if kind == "P" then return self:OnPing(text) end
-    local _, tag, char, realm, faction, ask, main, profs, class, level, seq, onMain, inviteName = strsplit("\t", text)
+    local _, tag, char, realm, faction, ask, main, profs, class, level, seq, onMain, inviteName, clubs = strsplit("\t", text)
     if kind ~= "H" then return end
     local full = A.BN.TagKeys(tag)
     char = A.BN.CleanName(char)
@@ -198,7 +248,8 @@ function Sync:OnMessage(text, sender)
         profs = CleanText(profs), class = CleanClass(class), level = CleanLevel(level),
         seq = seq, others = before and before.others or {},
         onMain = onMain == "1" or nil,    -- 0.7.2+: they're on the main they set
-        inviteName = CleanInvite(inviteName) }   -- 0.8.1+: how to invite them
+        inviteName = CleanInvite(inviteName),   -- 0.8.1+: how to invite them
+        clubs = ParseMemberships(clubs) or (before and before.clubs) }   -- 0.8.3+: who they are in each group
     -- A new announcement starts a new list of their other characters.
     if seq and seq ~= "" and (not before or before.seq ~= seq) then entry.others = {} end
     Peers()[full] = entry

@@ -149,9 +149,23 @@ function A:Test()
     for f, n in pairs(y.byFaction) do factions[#factions + 1] = f .. " " .. n end
     test.sync = { channel = self.Sync:ChannelId() ~= nil, sent = y.sent, heard = y.heard,
         rejected = y.rejected, byFaction = y.byFaction, lastSendError = y.lastSendError }
-    Say(("Sharing channel: %s; sent %d, heard %d%s"):format(
-        self.Sync:ChannelId() and "joined" or "not joined", y.sent, y.heard,
-        #factions > 0 and (" (" .. table.concat(factions, ", ") .. ")") or ""))
+    Say(("Sharing channel: %s; sent %d, heard %d%s%s"):format(
+        self.Sync:ChannelId() and "joined" or "|cffff6060not joined|r", y.sent, y.heard,
+        #factions > 0 and (" (" .. table.concat(factions, ", ") .. ")") or "",
+        (y.failed or 0) > 0 and (" |cffff6060- %d refused (%s)|r"):format(y.failed, tostring(y.lastSendError)) or ""))
+    -- Members whose addon we've heard, and which group member each is.
+    local mine = self.Sync:MyMemberships()
+    Say("You in your groups: " .. (mine ~= "" and mine or "|cffff6060not found|r"))
+    local n = 0
+    for key, p in pairs(self.db.peers or {}) do
+        n = n + 1
+        local clubs = {}
+        for club, member in pairs(p.clubs or {}) do clubs[#clubs + 1] = club .. ":" .. member end
+        Say(("  heard: %s (%s)%s%s"):format(tostring(p.char), tostring(p.faction or "?"),
+            #clubs > 0 and (", member " .. table.concat(clubs, ",")) or ", |cffff6060no group info (older version)|r",
+            self.Sync:InForever(key) and ", in Forever now" or ""))
+    end
+    if n == 0 then Say("  no other member's addon heard yet") end
 
     local CC = self.CommunityChat
     local number = CC:ChannelNumber(false)

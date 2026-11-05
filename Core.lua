@@ -109,7 +109,7 @@ function A:FillBattleNetRow(row, info, clubId)
         others = self.Me:OthersHere()
         if char and not main and self.Me:MainKey() == self.Me:CurrentKey() then row.role = "main" end
     else
-        local p = self.Sync and self.Sync:Peer(info.name)
+        local p = self.Sync and self.Sync:Peer(self.Sync:KeyFor(clubId, info) or info.name)
         -- Their addon's details only describe the character it announced.
         if p and (not char or char == p.char) then
             row.class, row.level, row.professions = ClassName(p.class), p.level, p.profs
@@ -125,7 +125,8 @@ function A:FillBattleNetRow(row, info, clubId)
     if row.online and info.isSelf ~= true then
         local presence = Enum and Enum.ClubMemberPresence
         local where = BN:FriendWhere(info.bnetAccountId, info.name)
-        local inForever = self.Sync and self.Sync:InForever(info.name)
+        local key = self.Sync and (self.Sync:KeyFor(clubId, info) or info.name)
+        local inForever = self.Sync and self.Sync:InForever(key)
         if presence and presence.OnlineMobile and info.presence == presence.OnlineMobile then
             row.elsewhere, row.elsewhereWhy = true, "on the Battle.net app"
         elseif where == "forever" or inForever == true then
@@ -150,10 +151,11 @@ function A:FillBattleNetRow(row, info, clubId)
     else
         local friend = BN:FriendInfo(info.bnetAccountId, info.name)
         local game = friend and friend.gameAccountInfo
-        local p = self.Sync and self.Sync:Peer(info.name)
+        local key = self.Sync and (self.Sync:KeyFor(clubId, info) or info.name)
+        local p = self.Sync and self.Sync:Peer(key)
         if BN:FriendWhere(info.bnetAccountId, info.name) == "forever" and type(game) == "table" and game.gameAccountID then
             row.invite = { gameAccountID = game.gameAccountID }
-        elseif p and self.Sync:InForever(info.name) and (p.inviteName or p.char) then
+        elseif p and self.Sync:InForever(key) and (p.inviteName or p.char) then
             row.invite = { name = p.inviteName or p.char }
         else
             row.inviteWhy = "Can't tell which character to invite (not a Battle.net friend, no LAFW Community)"

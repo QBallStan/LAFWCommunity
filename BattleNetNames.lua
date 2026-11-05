@@ -256,9 +256,11 @@ function BN:Resolve(bnetAccountID, battleTag, clubId, member)
         if name then return name, "self", A.Me and CleanName(A.Me:MainForCurrent()) end
     end
     local name = self:FriendCharacter(bnetAccountID, battleTag)
-    if name then return name, "friend", A.Sync and A.Sync:MainFor(battleTag, name) end
+    -- Their addon, found by who they are in this group (names are masked).
+    local key = A.Sync and A.Sync:KeyFor(clubId, member) or battleTag
+    if name then return name, "friend", A.Sync and A.Sync:MainFor(key, name) end
     if A.Sync then
-        local char, main = A.Sync:Character(battleTag)
+        local char, main = A.Sync:Character(key)
         if char then return char, "addon", main end
     end
 end
