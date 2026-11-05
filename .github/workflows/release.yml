@@ -1,0 +1,21 @@
+# Builds the addon zip and publishes a release when a version tag (v*) is pushed.
+name: Release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the zip
+        run: |
+          mkdir -p build/LAFWCommunity
+          rsync -a --exclude '.git*' --exclude build ./ build/LAFWCommunity/
+          cd build && zip -r "LAFWCommunity-${GITHUB_REF_NAME}-forever.zip" LAFWCommunity
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" "build/LAFWCommunity-${GITHUB_REF_NAME}-forever.zip" --title "$GITHUB_REF_NAME" --generate-notes
