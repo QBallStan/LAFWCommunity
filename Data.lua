@@ -13,7 +13,8 @@
 --     minutes), or when you press "Share now" in the settings;
 --   - reads everyone's lines as they're posted. The game hides group message
 --     text from addons except in chat events, so the channel is joined as a
---     chat channel (kept out of the chat windows) and read from there; the
+--     chat channel (in your main chat window, its lines filtered out) and read
+--     from there; the
 --     channel's history only serves to remove your own old lines. What was
 --     heard is kept, so members seen before stay known while offline;
 --   - removes your own older lines, so the channel holds about one per member;
@@ -436,27 +437,53 @@ function Data:Subscribe()
     Call(C_Club.FocusStream, self.clubId, self.streamId)
 end
 
--- Lines can only be read from chat events, which come for channels you're
--- in as a chat channel: join it as one, and keep it out of the chat windows
--- (once; after that, showing it in a window is up to you).
+-- Lines can only be read from chat events. The game sends those only for a
+-- channel that's in a chat window, so the channel is joined as a chat
+-- channel and kept in your main chat window, and its lines are kept from
+-- showing there by a chat filter (the Communities window still shows them).
+local function ChannelName(clubId, streamId)
+    if ChatFrameUtil and ChatFrameUtil.GetCommunitiesChannelName then
+        local ok, n = pcall(ChatFrameUtil.GetCommunitiesChannelName, clubId, streamId)
+        if ok and n then return n end
+    end
+    return ("Community:%s:%s"):format(tostring(clubId), tostring(streamId))
+end
+
+function Data:InAWindow()
+    local name = ChannelName(self.clubId, self.streamId):upper()
+    for i = 1, (NUM_CHAT_WINDOWS or 10) do
+        local frame = _G["ChatFrame" .. i]
+        for _, ch in pairs(frame and frame.channelList or {}) do
+            if type(ch) == "string" and ch:upper() == name then return true end
+        end
+    end
+    return false
+end
+
 function Data:JoinChat()
     if not self.clubId or self.chatJoined then return end
     self.chatJoined = true
     Call(C_Club.AddClubStreamChatChannel, self.clubId, self.streamId)
-    local d, key = DB(), StreamKey(self.clubId, self.streamId)
-    d.hidden = d.hidden or {}
-    if d.hidden[key] then return end
-    d.hidden[key] = true
     C_Timer.After(2, function()
-        for i = 1, (NUM_CHAT_WINDOWS or 10) do
-            local frame = _G["ChatFrame" .. i]
-            if frame and ChatFrameUtil and ChatFrameUtil.RemoveCommunitiesChannel then
-                pcall(ChatFrameUtil.RemoveCommunitiesChannel, frame, Data.clubId, Data.streamId, true)
-            elseif frame and ChatFrame_RemoveCommunitiesChannel then
-                pcall(ChatFrame_RemoveCommunitiesChannel, frame, Data.clubId, Data.streamId, true)
-            end
-        end
+        if Data:InAWindow() then return end
+        local frame, name = ChatFrame1, ChannelName(Data.clubId, Data.streamId)
+        if frame and frame.AddChannel then pcall(frame.AddChannel, frame, name)
+        elseif frame and ChatFrame_AddChannel then pcall(ChatFrame_AddChannel, frame, name) end
+        Data.stats.addedToWindow = Data:InAWindow()
     end)
+end
+
+-- Keep the channel's lines out of the chat windows.
+local function HideDataLines(frame, event, ...)
+    if not Data.clubId then return false end
+    local _, clubId, streamId = Call(C_Club.GetInfoFromLastCommunityChatLine)
+    if clubId == Data.clubId and streamId == Data.streamId then return true end
+    return false
+end
+if ChatFrameUtil and ChatFrameUtil.AddMessageEventFilter then
+    ChatFrameUtil.AddMessageEventFilter("CHAT_MSG_COMMUNITIES_CHANNEL", HideDataLines)
+elseif ChatFrame_AddMessageEventFilter then
+    ChatFrame_AddMessageEventFilter("CHAT_MSG_COMMUNITIES_CHANNEL", HideDataLines)
 end
 
 -- A line in a group channel, as chat sees it: here the text is readable.
