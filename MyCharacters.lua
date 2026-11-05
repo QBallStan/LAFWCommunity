@@ -31,13 +31,31 @@ function Me:Data()
     return d
 end
 
+-- The current character's professions: "Tailoring 52/75 - Enchanting 31/75".
+function Me:Professions()
+    if type(GetProfessions) ~= "function" or type(GetProfessionInfo) ~= "function" then return nil end
+    local ok, first, second = pcall(GetProfessions)
+    if not ok then return nil end
+    local list = {}
+    for _, index in ipairs({ first or false, second or false }) do
+        if index then
+            local fine, name, _, skill, maxSkill = pcall(GetProfessionInfo, index)
+            if fine and type(name) == "string" and name ~= "" then
+                local rank = type(skill) == "number" and (" " .. skill .. (type(maxSkill) == "number" and "/" .. maxSkill or "")) or ""
+                list[#list + 1] = name .. rank
+            end
+        end
+    end
+    return #list > 0 and table.concat(list, " - ") or nil
+end
+
 -- Your other characters on the current server, for the roster and Sync.
 function Me:OthersHere()
     local d, here, current = self:Data(), GetRealmName(), self:CurrentKey()
     local list = {}
     for key, c in pairs(d.chars) do
         if c.realm == here and key ~= current then
-            list[#list + 1] = { key = key, name = c.name, class = c.class,
+            list[#list + 1] = { key = key, name = c.name, class = c.class, profs = c.profs,
                 level = c.level, faction = c.faction, isMain = d.mains[here] == key }
         end
     end
@@ -68,7 +86,7 @@ function Me:Record()
     c.alt = nil   -- 0.3-0.4 per-character alt switch, no longer used
     c.name, c.realm = A.BN.PlayerName() or UnitName("player"), realm
     c.faction, c.class, c.level = UnitFactionGroup("player"), classFile, UnitLevel("player")
-    c.profs = nil   -- professions were dropped in 0.9.0
+    c.profs = self:Professions() or c.profs
     c.seen = time()
     d.chars[key] = c
     if self.window and self.window:IsShown() then self:Render() end
@@ -267,24 +285,28 @@ function Me:Open()
     chatHelp:SetTextColor(.75, .75, .75)
 
     Heading(f, -282, "Your main")
-    -- Your member note: the way members on other servers and factions learn
-    -- your main. Only Blizzard's menu can set it, so this shows what to paste.
-    local noteLabel = Text(f, "GameFontHighlight", 20, -306)
-    noteLabel:SetText("Member note")
-    local noteBox = CreateFrame("EditBox", nil, f, "InputBoxTemplate")
-    noteBox:SetSize(230, 20); noteBox:SetPoint("LEFT", noteLabel, "RIGHT", 12, 0); noteBox:SetAutoFocus(false)
-    noteBox:SetScript("OnEditFocusGained", function(self) self:HighlightText() end)
-    noteBox:SetScript("OnTextChanged", function(self, user)
-        if user then self:SetText(self.want or ""); self:HighlightText() end   -- read-only: it's there to copy
+    -- Sharing: what the group knows of you comes from the LAFW data channel.
+    local shareLabel = Text(f, "GameFontHighlight", 20, -306)
+    shareLabel:SetText("Sharing")
+    f.shareState = Text(f, "GameFontHighlightSmall", 0, 0, W - 250)
+    f.shareState:ClearAllPoints(); f.shareState:SetPoint("LEFT", shareLabel, "RIGHT", 12, 0)
+    f.shareState:SetWordWrap(false)
+    f.shareNow = PanelButton(f, "Share now", 100, function()
+        if A.Data then A.Data:ShareNow() end
+        Me:Render()
     end)
-    noteBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-    f.noteBox = noteBox
-    f.noteState = Text(f, "GameFontHighlightSmall", 0, 0, 150)
-    f.noteState:ClearAllPoints(); f.noteState:SetPoint("LEFT", noteBox, "RIGHT", 10, 0)
-    local noteHelp = Text(f, "GameFontHighlightSmall", 20, -330, W - 40)
-    noteHelp:SetText("Members on other servers and factions see your main through your member note in the group."
-        .. " Click the box, press Ctrl+C, then in the Communities window right-click your name > Set Note and paste it.")
-    noteHelp:SetTextColor(.75, .75, .75)
+    f.shareNow:SetPoint("TOPRIGHT", f, "TOPRIGHT", -18, -300)
+    f.shareNow:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Share now", 1, 1, 1)
+        GameTooltip:AddLine("Sends your character, main, levels and professions to the group right away.", nil, nil, nil, true)
+        GameTooltip:Show()
+    end)
+    f.shareNow:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    local shareHelp = Text(f, "GameFontHighlightSmall", 20, -330, W - 40)
+    shareHelp:SetText("Members of every server and faction see your characters, levels and professions through the group's"
+        .. " LAFW data channel. They're shared when you log in, set your main, level up or skill up (at most every 10 minutes).")
+    shareHelp:SetTextColor(.75, .75, .75)
     local help = Text(f, "GameFontHighlightSmall", 18, -366, W - 36)
     help:SetText("Pick your main. Every other character on the same server shows as its alt: \"Alt - Main\"."
         .. " Each server has its own main. A character appears here once you log in on it with the addon.")
@@ -335,18 +357,10 @@ function Me:Render()
     local f = self.window
     if not f or not f:IsShown() then return end
     for _, b in ipairs(f.checks) do b:SetChecked(b.Get() and true or false) end
-    if A.Notes then
-        local want, have = A.Notes:Suggested(), A.Notes:Current()
-        f.noteBox.want = want or ""
-        f.noteBox:SetText(want or "")
-        f.noteBox:SetEnabled(want ~= nil)
-        if not want then
-            f.noteState:SetText("|cff9a9a9apick your main first|r")
-        elseif have == want then
-            f.noteState:SetText("|cff33cc80set|r")
-        else
-            f.noteState:SetText("|cffffd100not set yet|r")
-        end
+    if A.Data then
+        local text, canShare = A.Data:Status()
+        f.shareState:SetText(text)
+        f.shareNow:SetEnabled(canShare and true or false)
     end
     local clubName = A.CommunityChat and A.CommunityChat:ClubName()
     f.clubLabel:SetText("Community: " .. (clubName and ("|cffffffff" .. clubName .. "|r") or "|cff9a9a9anone yet|r"))
@@ -411,16 +425,24 @@ end
 local events = CreateFrame("Frame")
 events:RegisterEvent("PLAYER_LOGIN")
 events:RegisterEvent("PLAYER_LEVEL_UP")
+events:RegisterEvent("SKILL_LINES_CHANGED")
+events:RegisterEvent("CHAT_MSG_SKILL")
 local pendingRecord
 events:SetScript("OnEvent", function(_, event)
     if not A.db then return end
     if event == "PLAYER_LOGIN" then Me:Record(); return end
-    -- The level changes a moment after the event: record once, then tell others.
+    -- A level or a profession skill up. The new value shows a moment after
+    -- the event: record once, then tell others if something changed.
     if pendingRecord then return end
     pendingRecord = true
     C_Timer.After(2, function()
         pendingRecord = nil
+        local c = Me:Data().chars[Me:CurrentKey()]
+        local before = c and ((c.level or "") .. "|" .. (c.profs or ""))
         Me:Record()
+        c = Me:Data().chars[Me:CurrentKey()]
+        if before == ((c.level or "") .. "|" .. (c.profs or "")) then return end
         if A.Sync then A.Sync:Announce(false) end
+        if A.Data then A.Data:Changed(true) end
     end)
 end)

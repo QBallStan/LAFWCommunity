@@ -5,8 +5,10 @@
 -- faction. A Blizzard Group's channels reach every member, whatever their
 -- faction or server, and keep their history. So the group owner adds one
 -- channel named "LAFW data", and each copy of the addon:
---   - posts one short line about you (character, main, your other characters
---     on this server) when that changes: a new character, a new main;
+--   - posts a short line about you (character, main, level, professions, and
+--     your other characters on this server) when that changes: a new
+--     character, a new main, a level or a skill up (those at most every 10
+--     minutes), or when you press "Share now" in the settings;
 --   - reads everyone's lines, from the channel's history at login and live;
 --   - removes your own older lines, so the channel holds about one per member;
 --   - turns the channel's notifications off and keeps it marked as read, so
@@ -16,7 +18,8 @@
 -- click (like /l), so the post waits for your first one.
 --
 -- Line: "LAFW1 <seq> <part>/<parts> <payload chunk>", the payload being
---   "1~Char~Realm~Faction~CLASS~Level~Main~OnMain~InviteName~Alt:CLASS:Level:IsMain,..."
+--   "1~Char~Realm~Faction~CLASS~Level~Main~OnMain~InviteName~Alt:CLASS:Level:IsMain:Profs,...~Profs"
+-- (Profs came in 0.11.0; older lines simply lack them.)
 -------------------------------------------------------------------------------
 local ADDON, A = ...
 local Data = {}
@@ -25,10 +28,11 @@ A.Data = Data
 local NAME = "lafw data"         -- the channel's name, compared without case
 local TAG = "LAFW1"
 local CHUNK = 200                -- payload characters per line
-local HISTORY = 100              -- lines read back at login
+local HISTORY = 200              -- lines read back at login
 local MAX_OTHERS = 15
 local RECENT = 6 * 3600          -- a line this recent says "in Forever", if they're still online
-local MAX_CLEANUP = 6            -- own old lines removed per session
+local MAX_CLEANUP = 40           -- own old lines removed per session, at most
+local AUTO_GAP = 600             -- level and skill ups are shared at most this often (seconds)
 
 Data.stats = { sent = 0, heard = 0, history = 0, rejected = 0, own = 0, removed = 0, byFaction = {} }
 Data.queue = {}                  -- actions waiting for a key press or click
@@ -48,6 +52,7 @@ local function DB()
     local d = A.db.data
     d.notified = d.notified or {}   -- ["club:stream"] = true once notifications were turned off
     d.posted = d.posted or {}       -- ["club:stream"] = the payload we last posted
+    d.postedAt = d.postedAt or {}   -- ["club:stream"] = when
     return d
 end
 
@@ -120,11 +125,12 @@ function Data:Payload()
     for i = 1, math.min(#others, MAX_OTHERS) do
         local o = others[i]
         local name = A.BN.CleanName(o.name)
-        if name then alts[#alts + 1] = table.concat({ Field(name), Field(o.class), Field(o.level), o.isMain and "1" or "0" }, ":") end
+        if name then alts[#alts + 1] = table.concat({ Field(name), Field(o.class), Field(o.level), o.isMain and "1" or "0", Field(o.profs) }, ":") end
     end
     return table.concat({ "1", Field(char), Field(GetRealmName()), Field(UnitFactionGroup("player")),
         Field(classFile), Field(UnitLevel("player")), Field(main), onMain and "1" or "0",
-        Field(A.Sync and A.Sync:InviteName()), table.concat(alts, ",") }, "~")
+        Field(A.Sync and A.Sync:InviteName()), table.concat(alts, ","),
+        Field(A.Me and A.Me:Professions()) }, "~")
 end
 
 -- The lines for one payload.
@@ -147,7 +153,10 @@ function Data:Update(force)
     if not force and d.posted[key] == payload and self.ownLatest then return end
     if self.pendingPayload == payload then return end
     self.pendingPayload = payload
-    local seq = tostring(time())
+    -- A new number each post, so our own lines tell posts apart.
+    local seq = math.max(time(), (tonumber(self.ownSeq) or 0) + 1, (self.lastSeq or 0) + 1)
+    self.lastSeq = seq
+    seq = tostring(seq)
     local clubId, streamId = self.clubId, self.streamId
     for _, line in ipairs(Data.Lines(payload, seq)) do
         self:Queue(function()
@@ -156,7 +165,12 @@ function Data:Update(force)
             return ok
         end, "send")
     end
-    self:Queue(function() d.posted[key] = payload; Data.pendingPayload = nil; return true end, "done", true)
+    self:Queue(function()
+        d.posted[key], d.postedAt[key] = payload, time()
+        Data.pendingPayload = nil
+        if A.Me and A.Me.window and A.Me.window:IsShown() then pcall(A.Me.Render, A.Me) end
+        return true
+    end, "done", true)
 end
 
 -- Remove our own older lines (one per key press).
@@ -165,7 +179,8 @@ function Data:CleanUp(keep)
     if not (privileges and privileges.canDestroyOwnMessage) then return end
     local clubId, streamId = self.clubId, self.streamId
     for _, id in ipairs(self.ownOld or {}) do
-        if self.stats.removed + #self.queue >= MAX_CLEANUP then break end
+        if (self.cleanupQueued or 0) >= MAX_CLEANUP then break end
+        self.cleanupQueued = (self.cleanupQueued or 0) + 1
         self:Queue(function()
             local ok = pcall(C_Club.DestroyMessage, clubId, streamId, id)
             if ok then Data.stats.removed = Data.stats.removed + 1 end
@@ -214,6 +229,7 @@ end
 -------------------------------------------------------------------------------
 local function CleanClass(t) if type(t) == "string" and t:match("^%u+$") and #t <= 20 then return t end end
 local function CleanLevel(t) local n = tonumber(t); if n and n >= 1 and n <= 200 then return math.floor(n) end end
+local function CleanProfs(t) if type(t) == "string" and t ~= "" and #t <= 120 and not t:find("[|%c]") then return t end end
 local function CleanInvite(t) if type(t) == "string" and t ~= "" and #t <= 80 and not t:find("[|%c]") then return t end end
 
 local function MessageTime(info)
@@ -225,7 +241,7 @@ local function MessageTime(info)
 end
 
 function Data.Parse(payload)
-    local v, char, realm, faction, class, level, main, onMain, invite, alts = strsplit("~", payload)
+    local v, char, realm, faction, class, level, main, onMain, invite, alts, profs = strsplit("~", payload)
     if v ~= "1" then return nil end
     char = A.BN.CleanName(char)
     if not char then return nil end
@@ -234,12 +250,12 @@ function Data.Parse(payload)
     local entry = { char = char, main = main, realm = realm ~= "" and realm or nil,
         faction = (faction == "Alliance" or faction == "Horde") and faction or nil,
         class = CleanClass(class), level = CleanLevel(level), onMain = onMain == "1" or nil,
-        inviteName = CleanInvite(invite), others = {} }
+        inviteName = CleanInvite(invite), profs = CleanProfs(profs), others = {} }
     for alt in (alts or ""):gmatch("[^,]+") do
-        local name, c, l, isMain = strsplit(":", alt)
+        local name, c, l, isMain, p = strsplit(":", alt)
         name = A.BN.CleanName(name)
         if name and #entry.others < MAX_OTHERS then
-            entry.others[#entry.others + 1] = { name = name, class = CleanClass(c), level = CleanLevel(l), isMain = isMain == "1" }
+            entry.others[#entry.others + 1] = { name = name, class = CleanClass(c), level = CleanLevel(l), isMain = isMain == "1", profs = CleanProfs(p) }
         end
     end
     return entry
@@ -284,9 +300,7 @@ function Data:Store(clubId, memberId, entry, at, live)
     if live then self.online[key] = nil end
     self.stats.heard = self.stats.heard + 1
     if entry.faction then self.stats.byFaction[entry.faction] = (self.stats.byFaction[entry.faction] or 0) + 1 end
-    if not before or before.char ~= entry.char or before.main ~= entry.main or #before.others ~= #entry.others then
-        A:NamesChanged()
-    end
+    A:NamesChanged()
 end
 
 -- Their addon posted lately, and they haven't gone offline since.
@@ -310,11 +324,15 @@ function Data:ReadHistory()
             pcall(self.OnLine, self, m, false)
         end
     end
-    -- Our own lines: keep the newest, remove the rest.
-    table.sort(self.ownLines or {}, function(a, b) return a.at > b.at end)
-    self.ownLatest = self.ownLines and self.ownLines[1]
-    self.ownOld = {}
-    for k = 2, #(self.ownLines or {}) do self.ownOld[#self.ownOld + 1] = self.ownLines[k].id end
+    -- Our own lines: keep the newest post (all its parts), remove the rest.
+    local newest
+    for _, l in ipairs(self.ownLines or {}) do if not newest or l.at > newest.at then newest = l end end
+    self.ownLatest = newest
+    self.ownSeq = newest and newest.seq
+    self.ownCurrent, self.ownOld = {}, {}
+    for _, l in ipairs(self.ownLines or {}) do
+        if l.seq == self.ownSeq then table.insert(self.ownCurrent, l.id) else table.insert(self.ownOld, l.id) end
+    end
     if not self.historyRead then
         self.historyRead = true
         self:Update()
@@ -367,7 +385,7 @@ events:SetScript("OnEvent", function(_, event, a1, a2, a3)
         if a1 == Data.clubId and a2 == Data.streamId then
             local info = Call(C_Club.GetMessageInfo, a1, a2, a3)
             if info and info.author and info.author.isSelf then
-                Data.ownLatest = { id = info.messageId, at = MessageTime(info) or time() }
+                pcall(Data.OnOwnLine, Data, info)
             else
                 pcall(Data.OnLine, Data, info, true)
             end
@@ -394,5 +412,59 @@ events:SetScript("OnEvent", function(_, event, a1, a2, a3)
     end
 end)
 
--- A character or main change: post again.
-function Data:Changed() if self.historyRead then self:Update() end end
+-- One of our own lines arrived: a new post makes the previous one old.
+function Data:OnOwnLine(info)
+    local seq = Str(info.content) and info.content:match("^" .. TAG .. " (%d+) ")
+    if not seq then return end
+    self.ownLatest = { id = info.messageId, at = MessageTime(info) or time(), seq = seq }
+    if seq ~= self.ownSeq then
+        self.ownOld = self.ownCurrent or {}
+        self.ownCurrent, self.ownSeq = {}, seq
+        self:CleanUp()
+    end
+    table.insert(self.ownCurrent, info.messageId)
+end
+
+-- Something about you changed: post again. A level or skill up (auto) waits
+-- until AUTO_GAP seconds have passed since our last post.
+function Data:Changed(auto)
+    if not self.historyRead then return end
+    if auto then
+        local last = DB().postedAt[StreamKey(self.clubId, self.streamId)]
+        local wait = last and (last + AUTO_GAP - time()) or 0
+        if wait > 0 then
+            if not self.autoTimer then
+                self.autoTimer = true
+                C_Timer.After(wait, function() Data.autoTimer = nil; Data:Update() end)
+            end
+            return
+        end
+    end
+    self:Update()
+end
+
+-- The "Share now" button: post right away (the click lets us).
+function Data:ShareNow()
+    if self.stopped then A:Message("The game blocked sharing this session; it'll try again after a /reload."); return end
+    if not self.clubId then pcall(self.Start, self) end
+    if not self.clubId then A:Message("Your group has no \"LAFW data\" channel yet: the group owner adds it once."); return end
+    if not self.historyRead then pcall(self.ReadHistory, self) end
+    self.pendingPayload = nil
+    self:Update(true)
+    if #self.queue > 0 then pcall(self.OnInput, self) end
+end
+
+-- For the settings window: a line of status, and whether "Share now" can work.
+function Data:Status()
+    if self.stopped or self.blocked then return "|cffff6060blocked by the game this session|r", false end
+    if not self.clubId then return "|cff9a9a9ano \"LAFW data\" channel in your group yet|r", true end
+    if #self.queue > 0 then return "|cffffd100sending, on your next key press or click|r", true end
+    local at = DB().postedAt[StreamKey(self.clubId, self.streamId)]
+    if not at then
+        return self.ownLatest and "|cff33cc80shared|r" or "|cffffd100not shared yet|r", true
+    end
+    local ago = time() - at
+    local when = ago < 60 and "just now" or (ago < 3600 and (math.floor(ago / 60) .. " min ago"))
+        or (ago < 86400 and (math.floor(ago / 3600) .. " h ago")) or date("%d %b", at)
+    return "|cff33cc80shared " .. when .. "|r", true
+end

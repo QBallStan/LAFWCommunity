@@ -2,7 +2,7 @@
 ## Title: LAFW Community
 ## Notes: Love At First Wipe community roster, and character names instead of BattleTags in Blizzard Groups.
 ## Author: Love At First Wipe
-## Version: 0.10.0
+## Version: 0.11.0
 ## SavedVariables: LAFWCommunityDB
 Core.lua
 UI.lua

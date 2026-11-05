@@ -214,7 +214,7 @@ function Sync:Announce(ask)
     self.seq = (self.seq or 0) + 1
     local seq = tostring(time() % 100000) .. "." .. self.seq
     local main = A.Me and A.BN.CleanName(A.Me:MainForCurrent()) or ""
-    local profs = ""   -- professions were dropped in 0.9.0 (the field stays for older versions)
+    local profs = A.Me and A.Me:Professions() or ""
     local _, classFile = UnitClass("player")
     self:Send(table.concat({ "H", tag, char, realm, faction, ask and "1" or "0", main,
         profs, classFile or "", tostring(UnitLevel("player") or ""), seq,
@@ -228,7 +228,7 @@ function Sync:Announce(ask)
         local name = A.BN.CleanName(c.name)
         if name then
             C_Timer.After(0.25 * i, function()
-                Sync:Send(table.concat({ "A", tag, seq, name, "", c.class or "",
+                Sync:Send(table.concat({ "A", tag, seq, name, CleanText(c.profs) or "", c.class or "",
                     tostring(c.level or ""), c.isMain and "1" or "0" }, "\t"))
             end)
         end
