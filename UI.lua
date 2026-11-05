@@ -56,20 +56,25 @@ end
 local function TagFor(role) return role == "alt" and "(alt)" or (role == "main" and "(main)" or nil) end
 A.NameWithTag, A.TagFor = NameWithTag, TagFor
 
--- Columns: level 4, name 60 (alt lines 70), faction 195, main 222, class and
--- professions 332 up to the "+" at the right.
-local MAIN_X, MAIN_W, DETAIL_X = 222, 104, 332
-local MAIN_LABEL = "|cffffd100Main|r"
--- What the Main column says for a member row: their main's name while
--- they're on an alt, "Main" on their main, nothing when it isn't known.
+-- Columns: level 4, name 60 (alt lines 70), faction 195, Main/Alt 222, class
+-- and professions 260 up to the "+" at the right.
+local MAIN_X, MAIN_W, DETAIL_X = 222, 32, 260
+local MAIN_LABEL, ALT_LABEL = "|cffffd100Main|r", "|cff9a9a9aAlt|r"
+-- What the Main column says for a member row: "Main" on their main, "Alt"
+-- on an alt (whose main is in the tooltip), nothing when it isn't known.
 local function MainColumn(row, display)
-    if row.role == "alt" and row.mainName then return A.BN:Shown(row.mainName) end
+    if row.role == "alt" then return ALT_LABEL end
     if row.role == "main" then return MAIN_LABEL end
-    if display ~= row then return row.name end              -- character community: on a linked alt
+    if display ~= row then return ALT_LABEL end              -- character community: on a linked alt
     if not row.bnAlts and row.alts and #row.alts > 0 then return MAIN_LABEL end
     return ""
 end
-A.MainColumn = MainColumn
+-- An expanded line: the member's main, or one of their alts.
+local function LineColumn(row, alt)
+    if alt == row or alt.role == "main" then return MAIN_LABEL end
+    return ALT_LABEL
+end
+A.MainColumn, A.LineColumn = MainColumn, LineColumn
 local function OneLine(fs, text, width)
     fs:SetWordWrap(false); fs:SetWidth(width); fs:SetText(text)
 end
@@ -178,7 +183,7 @@ function A:Draw()
                     line.level:SetText("Lvl "..(alt.level or "?"))
                     line.name:SetTextColor(alt.online and .2 or .6,alt.online and 1 or .6,alt.online and .4 or .6)
                     NameWithTag(line,line.name,line.role,alt.name,nil,120)
-                    OneLine(line.main,(alt==row or alt.role=="main") and MAIN_LABEL or "",MAIN_W)
+                    OneLine(line.main,LineColumn(row,alt),MAIN_W)
                     line.badge:ClearAllPoints(); line.badge:SetPoint("TOPLEFT",line,"TOPLEFT",195,-2)
                     line.badge:SetFaction(alt.faction)
                     OneLine(line.detail,(alt.class or "?").." - "..(alt.professions or "Professions unknown"),
@@ -270,10 +275,6 @@ function A:BuildWindow()
         end)
     end
     f.scroll:SetPoint("TOPLEFT",10,-55); f.scroll:SetPoint("BOTTOMRIGHT",-30,49)
-    -- Column headers, lined up with the rows (the list starts 10px in).
-    for _,h in ipairs({{"Character",60},{"Main",MAIN_X},{"Class - Professions",DETAIL_X}}) do
-        local t=Text(f,10,10+h[2],-40,140); t:SetTextColor(1,.82,0); t:SetText(h[1])
-    end
     f.content=CreateFrame("Frame",nil,f.scroll); f.content:SetSize(670,328); f.scroll:SetScrollChild(f.content)
     f.cards={}
     for i=1,40 do
