@@ -34,7 +34,3 @@ Right-click the minimap button to open the roster.
 You shouldn't need them, but:
 - `/lafw`: the roster. `/lafw settings`: the settings window.
 - `/lafw test`: a report for troubleshooting. Run it, then `/reload`, and send the result to whoever maintains the addon.
-
-## For the maintainer
-
-Every addon file sits at the top of this repository. To publish a version, bump `## Version` in `LAFWCommunity.toc` and push to `main`. The GitHub workflow then builds `LAFWCommunity-v<version>-forever.zip` (with the `LAFWCommunity` folder inside), tags the commit and publishes the release. It can also be run by hand from the Actions tab.
