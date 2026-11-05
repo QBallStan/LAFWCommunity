@@ -15,15 +15,11 @@ Names, professions and alts are shared between members who run the addon, so the
 
 ## Install
 
-**With WowUp (recommended, updates by itself)**
-1. Install [WowUp](https://wowup.io) and choose *World of Warcraft: Forever* at the top.
-2. Go to **Get Addons** > **Install from URL**.
-3. Paste `https://github.com/QBallStan/LAFWCommunity` and install.
-
-**By hand**
 1. Download the newest `LAFWCommunity-…-forever.zip` from [Releases](https://github.com/QBallStan/LAFWCommunity/releases) (not the green "Code" button).
 2. Unzip it into `World of Warcraft\_forever_\Interface\AddOns\`, so you end up with `AddOns\LAFWCommunity\LAFWCommunity.toc`.
 3. Restart the game.
+
+To update, do the same with the newest release: replace the old `LAFWCommunity` folder.
 
 ## First time in game
 
@@ -41,4 +37,4 @@ You shouldn't need them, but:
 
 ## For the maintainer
 
-Every addon file sits at the top of this repository. To publish a version, bump `## Version` in `LAFWCommunity.toc` and push to `main`. The GitHub workflow then builds `LAFWCommunity-v<version>-forever.zip` (with the `LAFWCommunity` folder inside), tags the commit and publishes the release, which is what WowUp installs. It can also be run by hand from the Actions tab.
+Every addon file sits at the top of this repository. To publish a version, bump `## Version` in `LAFWCommunity.toc` and push to `main`. The GitHub workflow then builds `LAFWCommunity-v<version>-forever.zip` (with the `LAFWCommunity` folder inside), tags the commit and publishes the release. It can also be run by hand from the Actions tab.

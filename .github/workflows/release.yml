@@ -1,7 +1,7 @@
 # Publishes a release whenever the version in LAFWCommunity.toc changes on
 # main (or when run by hand from the Actions tab): it builds
 # LAFWCommunity-v<version>-forever.zip, with the LAFWCommunity folder inside,
-# tags the commit v<version> and attaches the zip. WowUp installs from these.
+# tags the commit v<version> and attaches the zip.
 name: Release
 on:
   push:
