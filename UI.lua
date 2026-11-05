@@ -89,6 +89,28 @@ local function Status(r)
 end
 A.StatusColor = Status
 
+-- Right-click on a member: a small menu (Invite to group). Greyed out, with
+-- the reason, when they can't be invited from here.
+function A:RowMenu(owner,row)
+    local ok,why=self:CanInvite(row)
+    if MenuUtil and MenuUtil.CreateContextMenu then
+        MenuUtil.CreateContextMenu(owner,function(_,root)
+            root:CreateTitle(row.name or "")
+            local b=root:CreateButton(INVITE or "Invite to group",function() A:InviteRow(row) end)
+            if not ok then
+                b:SetEnabled(false)
+                if why and b.SetTooltip then
+                    b:SetTooltip(function(tip) GameTooltip_SetTitle(tip,why) end)
+                end
+            end
+        end)
+    elseif ok then
+        self:InviteRow(row)          -- no menu system: invite straight away
+    elseif why then
+        self:Message(why)
+    end
+end
+
 function A:Draw()
     local f=self.window
     if not f then return end
@@ -309,8 +331,10 @@ function A:BuildWindow()
         card.detail=Text(card,10,DETAIL_X,-6,190); card.detail:SetTextColor(.65,.65,.65)
         card.arrow=Text(card,10,450,-6,74); card.arrow:SetJustifyH("RIGHT")
         card.expansion=Text(card,10,48,-27,600); card.expansion:SetSpacing(8)
-        card:EnableMouse(true); card:SetScript("OnMouseUp",function(self)
-            if self.row then A.expanded[self.row.memberId]=not A.expanded[self.row.memberId]; A:Draw() end
+        card:EnableMouse(true); card:SetScript("OnMouseUp",function(self,button)
+            if not self.row then return end
+            if button=="RightButton" then A:RowMenu(self,self.row); return end
+            A.expanded[self.row.memberId]=not A.expanded[self.row.memberId]; A:Draw()
         end)
         card:SetScript("OnEnter",function(self)
             self:SetBackdropColor(.7,.7,.7,.12)
@@ -328,6 +352,7 @@ function A:BuildWindow()
                 elseif row.role=="main" then GameTooltip:AddLine("Main character",1,.82,0) end
                 if row.professions then GameTooltip:AddLine(row.professions,.9,.9,.9,true) end
                 if row.battleTag then GameTooltip:AddLine("BattleTag: "..row.battleTag,.65,.65,.65) end
+                if A:CanInvite(row) then GameTooltip:AddLine("Right-click to invite",.5,.8,1) end
             end
             GameTooltip:Show()
         end)

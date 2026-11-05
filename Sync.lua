@@ -102,7 +102,7 @@ end
 --   H  "H\tTag\tChar\tRealm\tFaction\tAsk\tMain\tProfs\tClass\tLevel\tSeq\tOnMain"
 --      who you are now. Char and Main are full names; Main is empty on the
 --      main or with no main for this server. 0.2 stops after Ask, 0.3-0.6
---      after Main.
+--      after Main. 0.8.1 adds InviteName (how to invite them) after OnMain.
 --   P  "P\tTag" every 5 minutes: still here (in Forever).
 --   A  "A\tTag\tSeq\tName\tProfs\tClass\tLevel\tIsMain"
 --      one of your other characters on this server, sent after an H with
@@ -132,6 +132,22 @@ local function CleanLevel(t)
     if n and n >= 1 and n <= 200 then return math.floor(n) end
 end
 Sync.CleanText = CleanText
+-- An invite target as the sender's game spells it: no codes, no tabs.
+local function CleanInvite(t)
+    if type(t) ~= "string" or t == "" or #t > 80 or t:find("[|%c]") then return nil end
+    return t
+end
+
+-- How others should invite you: the name your own game uses to invite you
+-- (Blizzard's unit menus invite with GetUnitName(unit, true)). Forever's
+-- names and realms differ from other versions, so the sender's own client
+-- is the one that knows.
+function Sync:InviteName()
+    local n = GetUnitName and GetUnitName("player", true)
+    if type(n) == "string" and n ~= "" then return n end
+    local first, surname = UnitName("player")
+    return first
+end
 
 function Sync:Announce(ask)
     local _, tag = A.BN:Self()
@@ -147,7 +163,8 @@ function Sync:Announce(ask)
     local _, classFile = UnitClass("player")
     self:Send(table.concat({ "H", tag, char, realm, faction, ask and "1" or "0", main,
         profs, classFile or "", tostring(UnitLevel("player") or ""), seq,
-        (A.Me and A.Me:MainKey() and A.Me:MainKey() == A.Me:CurrentKey()) and "1" or "0" }, "\t"))
+        (A.Me and A.Me:MainKey() and A.Me:MainKey() == A.Me:CurrentKey()) and "1" or "0",
+        Sync:InviteName() or "" }, "\t"))
     -- Your other characters here, a few at a time so the game doesn't
     -- throttle them.
     local others = A.Me and A.Me:OthersHere() or {}
@@ -167,7 +184,7 @@ function Sync:OnMessage(text, sender)
     local kind = text:sub(1, 1)
     if kind == "A" then return self:OnOther(text) end
     if kind == "P" then return self:OnPing(text) end
-    local _, tag, char, realm, faction, ask, main, profs, class, level, seq, onMain = strsplit("\t", text)
+    local _, tag, char, realm, faction, ask, main, profs, class, level, seq, onMain, inviteName = strsplit("\t", text)
     if kind ~= "H" then return end
     local full = A.BN.TagKeys(tag)
     char = A.BN.CleanName(char)
@@ -180,7 +197,8 @@ function Sync:OnMessage(text, sender)
     local entry = { char = char, main = main, realm = realm, faction = faction, at = time(),
         profs = CleanText(profs), class = CleanClass(class), level = CleanLevel(level),
         seq = seq, others = before and before.others or {},
-        onMain = onMain == "1" or nil }   -- 0.7.2+: they're on the main they set
+        onMain = onMain == "1" or nil,    -- 0.7.2+: they're on the main they set
+        inviteName = CleanInvite(inviteName) }   -- 0.8.1+: how to invite them
     -- A new announcement starts a new list of their other characters.
     if seq and seq ~= "" and (not before or before.seq ~= seq) then entry.others = {} end
     Peers()[full] = entry

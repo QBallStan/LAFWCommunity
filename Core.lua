@@ -138,12 +138,55 @@ function A:FillBattleNetRow(row, info, clubId)
     elseif info.isSelf == true then
         row.elsewhere = false
     end
+    -- How to invite them: through Battle.net for a friend in Forever, else by
+    -- the invite name their addon gave us.
+    row.invite = nil
+    if info.isSelf == true then
+        row.inviteWhy = "That's you"
+    elseif not row.online then
+        row.inviteWhy = "Offline"
+    elseif row.elsewhere then
+        row.inviteWhy = "Not in Forever right now"
+    else
+        local friend = BN:FriendInfo(info.bnetAccountId, info.name)
+        local game = friend and friend.gameAccountInfo
+        local p = self.Sync and self.Sync:Peer(info.name)
+        if BN:FriendWhere(info.bnetAccountId, info.name) == "forever" and type(game) == "table" and game.gameAccountID then
+            row.invite = { gameAccountID = game.gameAccountID }
+        elseif p and self.Sync:InForever(info.name) and (p.inviteName or p.char) then
+            row.invite = { name = p.inviteName or p.char }
+        else
+            row.inviteWhy = "Can't tell which character to invite (not a Battle.net friend, no LAFW Community)"
+        end
+    end
     row.bnAlts = {}
     for _, o in ipairs(others or {}) do
         row.bnAlts[#row.bnAlts + 1] = { name = BN:Shown(o.name), role = o.isMain and "main" or nil,
             class = ClassName(o.class), level = o.level, professions = o.profs,
             faction = o.faction or row.faction, online = false, memberId = row.memberId .. ":" .. o.name }
     end
+end
+
+-- Invite a member row to your group. Character communities invite by the
+-- row's character name.
+function A:InviteRow(row)
+    if not row then return end
+    local inv = row.invite
+    if inv and inv.gameAccountID and BNInviteFriend then
+        pcall(BNInviteFriend, inv.gameAccountID)
+    elseif inv and inv.name then
+        local fn = (C_PartyInfo and C_PartyInfo.InviteUnit) or InviteUnit
+        if fn then pcall(fn, inv.name) end
+    elseif not row.battleTag and row.online and row.name then
+        local fn = (C_PartyInfo and C_PartyInfo.InviteUnit) or InviteUnit
+        if fn then pcall(fn, row.name) end
+    end
+end
+function A:CanInvite(row)
+    if not row then return false, nil end
+    if row.invite then return true end
+    if not row.battleTag then return row.online == true, row.online and nil or "Offline" end
+    return false, row.inviteWhy
 end
 
 -- Who's in Forever changes as members' addons go quiet: repaint the open
