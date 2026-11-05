@@ -11,7 +11,7 @@ Our community is a Blizzard Group, so both factions can be in it. Blizzard Group
 - **`/l` talks in the community**, like `/p` for party. The community chat is added to your General chat tab the first time; remove it there if you prefer (right-click the tab > Settings > Channels).
 - **Its own chat color**, picked so it doesn't look like whispers or any other chat.
 
-Names and mains are shared between members who run the addon (through their member note in the group, whatever their server or faction), so the more of us have it, the better it works. Your Battle.net friends' characters show even if they don't have it.
+Names and mains are shared between members who run the addon on the same server and faction. For everyone else, set your **member note** to your main once (the addon's settings window shows the exact text, e.g. `Main: Aldren Brightwater`): members on other servers and factions then see your main instead of your BattleTag. Your Battle.net friends' characters show even if they don't have it.
 
 ## Install
 
@@ -25,6 +25,7 @@ To update, do the same with the newest release: replace the old `LAFWCommunity` 
 
 Click the **book button on your minimap** (or the *My characters* button in the LAFW tab):
 - under **Your main**, click *Set main* on your main. Every other character on the same server counts as its alt. A character shows up in the list once you've logged in on it with the addon;
+- set your **member note** as the window shows (right-click your name in the Communities window > Set Note), so members on other servers and factions see your main;
 - the other options are there too: first names only, show BattleTags, the community `/l` uses, the minimap button.
 
 Right-click the minimap button to open the roster.

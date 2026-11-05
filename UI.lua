@@ -348,7 +348,8 @@ function A:BuildWindow()
             end
             local row=self.row
             if row then
-                if row.role=="alt" and row.mainName then GameTooltip:AddLine("Alt of "..row.mainName,1,.82,0)
+                if row.mainOnly then GameTooltip:AddLine("Their main (from their note); their current character isn't known",1,.82,0,true)
+                elseif row.role=="alt" and row.mainName then GameTooltip:AddLine("Alt of "..row.mainName,1,.82,0)
                 elseif row.role=="main" then GameTooltip:AddLine("Main character",1,.82,0) end
                 if row.battleTag then GameTooltip:AddLine("BattleTag: "..row.battleTag,.65,.65,.65) end
                 if A:CanInvite(row) then GameTooltip:AddLine("Right-click to invite",.5,.8,1) end

@@ -94,7 +94,7 @@ function Me:SetMain(key)
     if not c or not c.realm then return end
     d.mains[c.realm] = key
     if A.Sync then A.Sync:Announce(false) end
-    if A.Notes then A.Notes:Soon(1) end
+    if A.Notes and Me.window and Me.window:IsShown() then Me:Render() end
     A:NamesChanged()
 end
 
@@ -155,7 +155,7 @@ function Me:Open()
     if self.window then self.window:Show(); self:Render(); return end
     local f = CreateFrame("Frame", "LAFWCommunitySettings", UIParent, "BasicFrameTemplateWithInset")
     self.window = f
-    f:SetSize(W, 712); f:SetPoint("CENTER"); f:SetFrameStrata("DIALOG")
+    f:SetSize(W, 776); f:SetPoint("CENTER"); f:SetFrameStrata("DIALOG")
     f.TitleText:SetText("LAFW Community")
     f:SetMovable(true); f:EnableMouse(true); f:RegisterForDrag("LeftButton")
     f:SetScript("OnDragStart", f.StartMoving); f:SetScript("OnDragStop", f.StopMovingOrSizing)
@@ -266,13 +266,31 @@ function Me:Open()
     chatHelp:SetTextColor(.75, .75, .75)
 
     Heading(f, -282, "Your main")
-    local help = Text(f, "GameFontHighlightSmall", 18, -302, W - 36)
+    -- Your member note: the way members on other servers and factions learn
+    -- your main. Only Blizzard's menu can set it, so this shows what to paste.
+    local noteLabel = Text(f, "GameFontHighlight", 20, -306)
+    noteLabel:SetText("Member note")
+    local noteBox = CreateFrame("EditBox", nil, f, "InputBoxTemplate")
+    noteBox:SetSize(230, 20); noteBox:SetPoint("LEFT", noteLabel, "RIGHT", 12, 0); noteBox:SetAutoFocus(false)
+    noteBox:SetScript("OnEditFocusGained", function(self) self:HighlightText() end)
+    noteBox:SetScript("OnTextChanged", function(self, user)
+        if user then self:SetText(self.want or ""); self:HighlightText() end   -- read-only: it's there to copy
+    end)
+    noteBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+    f.noteBox = noteBox
+    f.noteState = Text(f, "GameFontHighlightSmall", 0, 0, 150)
+    f.noteState:ClearAllPoints(); f.noteState:SetPoint("LEFT", noteBox, "RIGHT", 10, 0)
+    local noteHelp = Text(f, "GameFontHighlightSmall", 20, -330, W - 40)
+    noteHelp:SetText("Members on other servers and factions see your main through your member note in the group."
+        .. " Click the box, press Ctrl+C, then in the Communities window right-click your name > Set Note and paste it.")
+    noteHelp:SetTextColor(.75, .75, .75)
+    local help = Text(f, "GameFontHighlightSmall", 18, -366, W - 36)
     help:SetText("Pick your main. Every other character on the same server shows as its alt: \"Alt - Main\"."
         .. " Each server has its own main. A character appears here once you log in on it with the addon.")
     help:SetTextColor(.75, .75, .75)
 
     local scroll = CreateFrame("ScrollFrame", nil, f, "UIPanelScrollFrameTemplate")
-    scroll:SetPoint("TOPLEFT", 14, -336); scroll:SetPoint("BOTTOMRIGHT", -32, 48)
+    scroll:SetPoint("TOPLEFT", 14, -400); scroll:SetPoint("BOTTOMRIGHT", -32, 48)
     local content = CreateFrame("Frame", nil, scroll)
     content:SetSize(W - 50, 10); scroll:SetScrollChild(content)
     f.content, f.rows = content, {}
@@ -316,6 +334,19 @@ function Me:Render()
     local f = self.window
     if not f or not f:IsShown() then return end
     for _, b in ipairs(f.checks) do b:SetChecked(b.Get() and true or false) end
+    if A.Notes then
+        local want, have = A.Notes:Suggested(), A.Notes:Current()
+        f.noteBox.want = want or ""
+        f.noteBox:SetText(want or "")
+        f.noteBox:SetEnabled(want ~= nil)
+        if not want then
+            f.noteState:SetText("|cff9a9a9apick your main first|r")
+        elseif have == want then
+            f.noteState:SetText("|cff33cc80set|r")
+        else
+            f.noteState:SetText("|cffffd100not set yet|r")
+        end
+    end
     local clubName = A.CommunityChat and A.CommunityChat:ClubName()
     f.clubLabel:SetText("Community: " .. (clubName and ("|cffffffff" .. clubName .. "|r") or "|cff9a9a9anone yet|r"))
     if A.CommunityColor then

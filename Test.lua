@@ -166,9 +166,9 @@ function A:Test()
             self.Sync:InForever(key) and ", in Forever now" or ""))
     end
     if n == 0 then Say("  no other member's addon heard yet") end
-    local ns = self.Notes and self.Notes.stats or {}
-    Say(("Member note: %s%s"):format(ns.last and ('"' .. ns.last .. '"') or "not written this session",
-        ns.lastError and (" |cffff6060(" .. ns.lastError .. ")|r") or ""))
+    local want, have = self.Notes:Suggested(), self.Notes:Current()
+    Say(("Your member note: %s%s"):format(have and ('"' .. have .. '"') or "none",
+        want and (have == want and " (as it should be)" or (' |cffffd100- should be "' .. want .. '"|r')) or " (pick your main first)"))
 
     local CC = self.CommunityChat
     local number = CC:ChannelNumber(false)

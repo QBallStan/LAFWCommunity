@@ -72,6 +72,7 @@ function A:FillBattleNetRow(row, info, clubId)
     -- name is in the tooltip. Chat and the member list keep "Alt - Main".
     local char, source, main, noteIsMain = nil, nil, nil, nil
     if BN:Settings().enabled then char, source, main, noteIsMain = BN:Resolve(info.bnetAccountId, info.name, clubId, info) end
+    row.mainOnly = source == "note-main" or nil   -- we know their main, not what they're on
     if char then
         row.name = BN:Shown(char)
         row.mainName = main and BN:Shown(main) ~= row.name and main or nil

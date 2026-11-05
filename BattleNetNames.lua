@@ -261,9 +261,17 @@ local function Capitalized(name)
     end
     return name
 end
+-- Returns char, main, isMain. "Main: Tachi Nightwatch" (set by hand, the
+-- way the addon asks) gives only the main: nil, "Tachi Nightwatch", false.
 function BN.ParseNote(note)
     note = Str(note)
     if not note or #note > 120 then return nil end
+    local onlyMain = note:match("^%s*[Mm]ain%s*:%s*(.-)%s*$")
+    if onlyMain then
+        onlyMain = Capitalized(CleanName(onlyMain))
+        if onlyMain then return nil, onlyMain, false end
+        return nil
+    end
     local char, main = note:match("^(.-) %(alt of (.-)%)$")
     if char then
         char, main = Capitalized(CleanName(char)), Capitalized(CleanName(main))
@@ -298,14 +306,18 @@ function BN:Resolve(bnetAccountID, battleTag, clubId, member)
     local key = A.Sync and A.Sync:KeyFor(clubId, member) or battleTag
     if name then
         local main = A.Sync and A.Sync:MainFor(key, name)
-        if not main and noteChar == name then main = noteMain end
+        -- "Main: X" names their main whatever they're on.
+        if not main and (noteChar == name or not noteChar) then main = noteMain end
+        if main == name then return name, "friend", nil, true end
         return name, "friend", main, noteChar == name and noteIsMain or nil
     end
     if A.Sync then
         local char, main = A.Sync:Character(key)
-        if char then return char, "addon", main end
+        if char then return char, "addon", main or (not noteChar and noteMain ~= char and noteMain) or nil end
     end
     if noteChar then return noteChar, "note", noteMain, noteIsMain end
+    -- Only their main is known: show that rather than a BattleTag.
+    if noteMain then return noteMain, "note-main", nil, nil end
 end
 
 -------------------------------------------------------------------------------
