@@ -190,6 +190,15 @@ function A:Test()
         for f, n in pairs(ds.byFaction) do factions[#factions + 1] = f .. " " .. n end
         Say(("  heard %d member line(s)%s, %d rejected; answered %d hello(s)"):format(ds.heard,
             #factions > 0 and (" (" .. table.concat(factions, ", ") .. ")") or "", ds.rejected, ds.replies or 0))
+        Say(("  game events: %d new line(s) in the group (%d in LAFW data), %d history download(s), %d range(s) read"):format(
+            ds.liveEvents or 0, ds.liveOurs or 0, ds.historyEvents or 0, ds.ranges or 0))
+        local dbg = self.db.data and self.db.data.debug or {}
+        for k = 1, math.min(#dbg, 6) do
+            local e = dbg[k]
+            Say(("    %s member %s%s: \"%s\" -> %s"):format(e.live and "live" or "history", tostring(e.member),
+                e.self == "true" and " (you)" or "", tostring(e.text):gsub("|", "||"), tostring(e.result)))
+        end
+        if #dbg == 0 then Say("    no lines seen in the channel yet") end
         test.data = { found = true, subscribed = D.subscribed, filter = fname, history = ds.history, own = ds.own,
             sent = ds.sent, removed = ds.removed, heard = ds.heard, byFaction = ds.byFaction, blocked = blocked,
             waiting = #D.queue, timedOut = D.historyTimedOut }

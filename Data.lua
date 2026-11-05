@@ -43,6 +43,8 @@ Data.stats = { sent = 0, heard = 0, history = 0, rejected = 0, own = 0, removed 
 Data.queue = {}                  -- actions waiting for a key press or click
 Data.parts = {}                  -- [memberKey] = { seq, n, got = {} }
 Data.online = {}                 -- [key] = false once seen going offline this session
+Data.seenIds = {}                -- lines already read
+Data.removing = {}               -- own old lines already queued for removal
 
 local function Call(fn, ...)
     if type(fn) ~= "function" then return nil end
@@ -51,6 +53,12 @@ local function Call(fn, ...)
 end
 local function Secret(v) return issecretvalue and v ~= nil and issecretvalue(v) end
 local function Str(v) if type(v) == "string" and not Secret(v) and v ~= "" then return v end end
+local function MessageKey(info)
+    local id = info and info.messageId
+    if type(id) ~= "table" or Secret(id.epoch) then return nil end
+    return tostring(id.epoch) .. ":" .. tostring(id.position)
+end
+
 
 local function DB()
     A.db.data = A.db.data or {}
@@ -187,6 +195,7 @@ function Data:CleanUp(keep)
     for _, id in ipairs(self.ownOld or {}) do
         if (self.cleanupQueued or 0) >= MAX_CLEANUP then break end
         self.cleanupQueued = (self.cleanupQueued or 0) + 1
+        self.removing[MessageKey({ messageId = id }) or id] = true
         self:Queue(function()
             local ok = pcall(C_Club.DestroyMessage, clubId, streamId, id)
             if ok then Data.stats.removed = Data.stats.removed + 1 end
@@ -269,31 +278,61 @@ function Data.Parse(payload)
 end
 
 -- One line from the channel (history or live).
+-- The last lines seen in the channel and what became of them, for /lafw test
+-- (kept in the saved variables, so they can be read after a /reload).
+function Data:Note(info, live, result)
+    local d = DB()
+    d.debug = d.debug or {}
+    local author = type(info) == "table" and type(info.author) == "table" and info.author or {}
+    local content = type(info) == "table" and info.content
+    local text = Secret(content) and "<secret>" or (type(content) == "string" and content:sub(1, 70)) or ("<" .. type(content) .. ">")
+    table.insert(d.debug, 1, { at = time(), live = live and true or false, member = Secret(author.memberId) and "<secret>" or tostring(author.memberId),
+        self = Secret(author.isSelf) and "<secret>" or tostring(author.isSelf), text = text, result = result })
+    while #d.debug > 12 do table.remove(d.debug) end
+end
+
 function Data:OnLine(info, live)
-    if type(info) ~= "table" or info.destroyed then return end
+    if type(info) ~= "table" then return end
+    if info.destroyed then return end
+    -- The same line can come again (history re-read): once is enough.
+    local mk = MessageKey(info)
+    if mk then
+        if self.seenIds[mk] then return end
+        self.seenIds[mk] = true
+    end
     local text, author = Str(info.content), info.author
-    if not text or type(author) ~= "table" then return end
+    if not text or type(author) ~= "table" then self:Note(info, live, "no text or author"); return end
     local seq, i, n, chunk = text:match("^" .. TAG .. " (%d+) (%d+)/(%d+) (.*)$")
     i, n = tonumber(i), tonumber(n)
-    if not seq or not i or not n or n > 10 or i > n then self.stats.rejected = self.stats.rejected + 1; return end
+    if not seq or not i or not n or n > 10 or i > n then
+        self.stats.rejected = self.stats.rejected + 1
+        self:Note(info, live, "not an addon line")
+        return
+    end
     local at = MessageTime(info) or time()
     if author.isSelf then
         self.stats.own = self.stats.own + 1
         -- Our newest line stays; older ones go.
         self.ownLines = self.ownLines or {}
         self.ownLines[#self.ownLines + 1] = { id = info.messageId, at = at, seq = seq }
+        self:Note(info, live, "yours")
         return
     end
     local memberId = author.memberId
-    if type(memberId) ~= "number" then return end
+    if type(memberId) ~= "number" or Secret(memberId) then self:Note(info, live, "no member ID (" .. type(memberId) .. ")"); return end
     local mkey = memberId .. ":" .. seq
     local p = self.parts[mkey] or { n = n, got = {}, count = 0 }
     self.parts[mkey] = p
     if not p.got[i] then p.got[i] = chunk; p.count = p.count + 1 end
-    if p.count < p.n then return end
+    if p.count < p.n then self:Note(info, live, ("part %d of %d"):format(i, n)); return end
     self.parts[mkey] = nil
     local entry = Data.Parse(table.concat(p.got))
-    if not entry then self.stats.rejected = self.stats.rejected + 1; return end
+    if not entry then
+        self.stats.rejected = self.stats.rejected + 1
+        self:Note(info, live, "couldn't read it")
+        return
+    end
+    self:Note(info, live, "stored: " .. entry.char)
     local hello = entry.hello
     entry.hello = nil
     self:Store(self.clubId, memberId, entry, at, live)
@@ -326,31 +365,34 @@ end
 function Data:ReadHistory()
     if not self.clubId then return end
     local ranges = Call(C_Club.GetMessageRanges, self.clubId, self.streamId)
-    local range = type(ranges) == "table" and ranges[#ranges]
-    if range and range.oldestMessageId and range.newestMessageId then
-        local messages = Call(C_Club.GetMessagesInRange, self.clubId, self.streamId, range.oldestMessageId, range.newestMessageId) or {}
-        self.ownLines = {}
-        for _, m in ipairs(messages) do
-            self.stats.history = self.stats.history + 1
-            pcall(self.OnLine, self, m, false)
+    self.stats.ranges = type(ranges) == "table" and #ranges or -1
+    for _, range in ipairs(type(ranges) == "table" and ranges or {}) do
+        if range.oldestMessageId and range.newestMessageId then
+            local messages = Call(C_Club.GetMessagesInRange, self.clubId, self.streamId, range.oldestMessageId, range.newestMessageId) or {}
+            for _, m in ipairs(messages) do
+                self.stats.history = self.stats.history + 1
+                pcall(self.OnLine, self, m, false)
+            end
         end
     end
     -- Our own lines: keep the newest post (all its parts), remove the rest.
-    local newest
-    for _, l in ipairs(self.ownLines or {}) do if not newest or l.at > newest.at then newest = l end end
-    self.ownLatest = newest
-    self.ownSeq = newest and newest.seq
+    local newest = self.ownLatest
+    for _, l in ipairs(self.ownLines or {}) do
+        if not newest or (tonumber(l.seq) or 0) > (tonumber(newest.seq) or 0) then newest = l end
+    end
+    if newest then self.ownLatest, self.ownSeq = newest, newest.seq end
     self.ownCurrent, self.ownOld = {}, {}
     for _, l in ipairs(self.ownLines or {}) do
-        if l.seq == self.ownSeq then table.insert(self.ownCurrent, l.id) else table.insert(self.ownOld, l.id) end
+        if l.seq == self.ownSeq then table.insert(self.ownCurrent, l.id)
+        elseif not self.removing[MessageKey({ messageId = l.id }) or l] then table.insert(self.ownOld, l.id) end
     end
     if not self.historyRead then
         self.historyRead = true
         -- Logging in: say hello (others answer), unless we just did (a quick /reload).
         local last = DB().postedAt[StreamKey(self.clubId, self.streamId)]
         if last and time() - last < HELLO_GAP then self:Update() else self:Update(true, true) end
-        self:CleanUp()
     end
+    self:CleanUp()
 end
 
 -------------------------------------------------------------------------------
@@ -433,7 +475,9 @@ events:SetScript("OnEvent", function(_, event, a1, a2, a3)
     elseif event == "CLUB_STREAM_ADDED" or event == "CLUB_STREAMS_LOADED" then
         if not Data.clubId and IsLoggedIn() then C_Timer.After(1, function() pcall(Data.Start, Data) end) end
     elseif event == "CLUB_MESSAGE_ADDED" then
+        if a1 == Data.clubId then Data.stats.liveEvents = (Data.stats.liveEvents or 0) + 1 end
         if a1 == Data.clubId and a2 == Data.streamId then
+            Data.stats.liveOurs = (Data.stats.liveOurs or 0) + 1
             local info = Call(C_Club.GetMessageInfo, a1, a2, a3)
             if info and info.author and info.author.isSelf then
                 pcall(Data.OnOwnLine, Data, info)
@@ -464,7 +508,10 @@ events:SetScript("OnEvent", function(_, event, a1, a2, a3)
             end
         end
     elseif event == "CLUB_MESSAGE_HISTORY_RECEIVED" then
-        if a1 == Data.clubId and a2 == Data.streamId then pcall(Data.ReadHistory, Data) end
+        if a1 == Data.clubId and a2 == Data.streamId then
+            Data.stats.historyEvents = (Data.stats.historyEvents or 0) + 1
+            pcall(Data.ReadHistory, Data)
+        end
     elseif event == "CLUB_MEMBER_PRESENCE_UPDATED" then
         local offline = Enum and Enum.ClubMemberPresence and Enum.ClubMemberPresence.Offline
         if a1 == Data.clubId and offline and a3 == offline then
@@ -484,11 +531,26 @@ events:SetScript("OnEvent", function(_, event, a1, a2, a3)
     end
 end)
 
+-- In case the game doesn't tell us about new lines in a channel we're not
+-- looking at: check the channel every minute.
+if C_Timer and C_Timer.NewTicker then
+    C_Timer.NewTicker(60, function()
+        if Data.clubId and Data.historyRead and Data.subscribed then
+            Call(C_Club.RequestMoreMessagesBefore, Data.clubId, Data.streamId, nil, 50)
+            pcall(Data.ReadHistory, Data)
+        end
+    end)
+end
+
 -- One of our own lines arrived: a new post makes the previous one old.
 function Data:OnOwnLine(info)
     local seq = Str(info.content) and info.content:match("^" .. TAG .. " (%d+) ")
     if not seq then return end
     self.ownLatest = { id = info.messageId, at = MessageTime(info) or time(), seq = seq }
+    local mk = MessageKey(info)
+    if mk then self.seenIds[mk] = true end
+    self.ownLines = self.ownLines or {}
+    table.insert(self.ownLines, self.ownLatest)
     if seq ~= self.ownSeq then
         self.ownOld = self.ownCurrent or {}
         self.ownCurrent, self.ownSeq = {}, seq
