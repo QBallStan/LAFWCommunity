@@ -57,7 +57,7 @@ local function TagFor(role) return role == "alt" and "(alt)" or (role == "main" 
 A.NameWithTag, A.TagFor = NameWithTag, TagFor
 
 -- Columns: level 4, name 60 (alt lines 70), faction 195, Main/Alt 222, class
--- and professions 260 up to the "+" at the right.
+-- 260 up to the "+" at the right.
 local MAIN_X, MAIN_W, DETAIL_X = 222, 32, 260
 local MAIN_LABEL, ALT_LABEL = "|cffffd100Main|r", "|cff9a9a9aAlt|r"
 -- What the Main column says for a member row: "Main" on their main, "Alt"
@@ -123,7 +123,7 @@ function A:Draw()
     for _,row in ipairs(self.rows) do
         if not (links[row.memberId] and byId[links[row.memberId]]) then
             row.alts={}; row.groupOnline=row.online; row.activeAlt=nil
-            local matches=(row.name.." "..(row.mainName or "").." "..(row.class or "").." - "..(row.professions or "Professions unknown")..(row.activeAlt and "  |cff33cc80Online: "..row.activeAlt.."|r" or "")):lower():find(query,1,true)
+            local matches=(row.name.." "..(row.mainName or "").." "..(row.class or "")..(row.activeAlt and "  |cff33cc80Online: "..row.activeAlt.."|r" or "")):lower():find(query,1,true)
             local factionMatch=self.faction=="All" or row.faction==self.faction
             for altId,mainId in pairs(links) do
                 local alt=byId[altId]
@@ -137,7 +137,7 @@ function A:Draw()
             -- A Blizzard Group member's other characters, from their addon.
             for _,alt in ipairs(row.bnAlts or {}) do
                 row.alts[#row.alts+1]=alt
-                matches=matches or (alt.name.." "..(alt.class or "").." "..(alt.professions or "")):lower():find(query,1,true)
+                matches=matches or (alt.name.." "..(alt.class or "")):lower():find(query,1,true)
             end
             if not row.bnAlts then table.sort(row.alts,function(a,b) return a.name<b.name end) end
             if row.groupOnline then online=online+1 end
@@ -177,7 +177,7 @@ function A:Draw()
             card.badge:SetFaction(display.faction)
             OneLine(card.main,MainColumn(row,display),MAIN_W)
             local cardW=card:GetWidth() or 540
-            OneLine(card.detail,(display.class or "?").." - "..(display.professions or "Professions unknown"),
+            OneLine(card.detail,display.class or "",
                 math.max(80,cardW-DETAIL_X-(#alts>0 and 64 or 16)))
             do
                 local c=Status(row.groupOnline and (row.online and row or {online=true}) or {online=false})
@@ -221,7 +221,7 @@ function A:Draw()
                     OneLine(line.main,LineColumn(row,alt),MAIN_W)
                     line.badge:ClearAllPoints(); line.badge:SetPoint("TOPLEFT",line,"TOPLEFT",195,-2)
                     line.badge:SetFaction(alt.faction)
-                    OneLine(line.detail,(alt.class or "?").." - "..(alt.professions or "Professions unknown"),
+                    OneLine(line.detail,alt.class or "",
                         math.max(80,(card:GetWidth() or 540)-DETAIL_X-16))
                 end
             end
@@ -350,7 +350,6 @@ function A:BuildWindow()
             if row then
                 if row.role=="alt" and row.mainName then GameTooltip:AddLine("Alt of "..row.mainName,1,.82,0)
                 elseif row.role=="main" then GameTooltip:AddLine("Main character",1,.82,0) end
-                if row.professions then GameTooltip:AddLine(row.professions,.9,.9,.9,true) end
                 if row.battleTag then GameTooltip:AddLine("BattleTag: "..row.battleTag,.65,.65,.65) end
                 if A:CanInvite(row) then GameTooltip:AddLine("Right-click to invite",.5,.8,1) end
             end

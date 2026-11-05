@@ -31,31 +31,13 @@ function Me:Data()
     return d
 end
 
--- The current character's professions: "Tailoring 1/75 - Enchanting 1/75".
-function Me:Professions()
-    if type(GetProfessions) ~= "function" or type(GetProfessionInfo) ~= "function" then return nil end
-    local ok, first, second = pcall(GetProfessions)
-    if not ok then return nil end
-    local list = {}
-    for _, index in ipairs({ first or false, second or false }) do
-        if index then
-            local fine, name, _, skill, maxSkill = pcall(GetProfessionInfo, index)
-            if fine and type(name) == "string" and name ~= "" then
-                local rank = type(skill) == "number" and (" " .. skill .. (type(maxSkill) == "number" and "/" .. maxSkill or "")) or ""
-                list[#list + 1] = name .. rank
-            end
-        end
-    end
-    return #list > 0 and table.concat(list, " - ") or nil
-end
-
 -- Your other characters on the current server, for the roster and Sync.
 function Me:OthersHere()
     local d, here, current = self:Data(), GetRealmName(), self:CurrentKey()
     local list = {}
     for key, c in pairs(d.chars) do
         if c.realm == here and key ~= current then
-            list[#list + 1] = { key = key, name = c.name, profs = c.profs, class = c.class,
+            list[#list + 1] = { key = key, name = c.name, class = c.class,
                 level = c.level, faction = c.faction, isMain = d.mains[here] == key }
         end
     end
@@ -86,7 +68,7 @@ function Me:Record()
     c.alt = nil   -- 0.3-0.4 per-character alt switch, no longer used
     c.name, c.realm = A.BN.PlayerName() or UnitName("player"), realm
     c.faction, c.class, c.level = UnitFactionGroup("player"), classFile, UnitLevel("player")
-    c.profs = self:Professions() or c.profs
+    c.profs = nil   -- professions were dropped in 0.9.0
     c.seen = time()
     d.chars[key] = c
     if self.window and self.window:IsShown() then self:Render() end
@@ -112,6 +94,7 @@ function Me:SetMain(key)
     if not c or not c.realm then return end
     d.mains[c.realm] = key
     if A.Sync then A.Sync:Announce(false) end
+    if A.Notes then A.Notes:Soon(1) end
     A:NamesChanged()
 end
 
@@ -396,20 +379,16 @@ end
 local events = CreateFrame("Frame")
 events:RegisterEvent("PLAYER_LOGIN")
 events:RegisterEvent("PLAYER_LEVEL_UP")
-events:RegisterEvent("SKILL_LINES_CHANGED")
 local pendingRecord
 events:SetScript("OnEvent", function(_, event)
     if not A.db then return end
     if event == "PLAYER_LOGIN" then Me:Record(); return end
-    -- Skill and level changes come in bursts: record once, then tell others.
+    -- The level changes a moment after the event: record once, then tell others.
     if pendingRecord then return end
     pendingRecord = true
     C_Timer.After(2, function()
         pendingRecord = nil
-        local key = Me:CurrentKey()
-        local before = Me:Data().chars[key] and Me:Data().chars[key].profs
         Me:Record()
-        local after = Me:Data().chars[key] and Me:Data().chars[key].profs
-        if before ~= after and A.Sync then A.Sync:Announce(false) end
+        if A.Sync then A.Sync:Announce(false) end
     end)
 end)

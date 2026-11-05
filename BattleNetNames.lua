@@ -244,6 +244,42 @@ function BN:Member(clubId, bnetAccountID, battleTag)
     return byName
 end
 
+-- A member note written by the addon (Notes.lua):
+--   "Char (alt of Main)" / "Char (main)" / "Char"
+-- Returns char, main, isMain, or nil for a note that isn't one of ours
+-- (WoW names are capitalized words, so "back on monday" doesn't count).
+local function Capitalized(name)
+    if not name then return nil end
+    local start = 1
+    while true do
+        local b = name:byte(start)
+        -- An uppercase ASCII letter, or a UTF-8 letter (accented capitals).
+        if not b or not ((b >= 65 and b <= 90) or b >= 0xC3) then return nil end
+        local s = name:find(SEP, start, true)
+        if not s then break end
+        start = s + #SEP
+    end
+    return name
+end
+function BN.ParseNote(note)
+    note = Str(note)
+    if not note or #note > 120 then return nil end
+    local char, main = note:match("^(.-) %(alt of (.-)%)$")
+    if char then
+        char, main = Capitalized(CleanName(char)), Capitalized(CleanName(main))
+        if char then return char, main ~= char and main or nil, false end
+        return nil
+    end
+    char = note:match("^(.-) %(main%)$")
+    if char then
+        char = Capitalized(CleanName(char))
+        if char then return char, nil, true end
+        return nil
+    end
+    char = Capitalized(CleanName(note))
+    if char then return char, nil, false end
+end
+
 function BN:Resolve(bnetAccountID, battleTag, clubId, member)
     local selfID, selfTag = self:Self()
     bnetAccountID = Num(bnetAccountID)
@@ -255,14 +291,21 @@ function BN:Resolve(bnetAccountID, battleTag, clubId, member)
         local name = BN.PlayerName()
         if name then return name, "self", A.Me and CleanName(A.Me:MainForCurrent()) end
     end
+    -- Their member note: reaches us whatever their server or faction.
+    local noteChar, noteMain, noteIsMain = BN.ParseNote(member and member.memberNote)
     local name = self:FriendCharacter(bnetAccountID, battleTag)
     -- Their addon, found by who they are in this group (names are masked).
     local key = A.Sync and A.Sync:KeyFor(clubId, member) or battleTag
-    if name then return name, "friend", A.Sync and A.Sync:MainFor(key, name) end
+    if name then
+        local main = A.Sync and A.Sync:MainFor(key, name)
+        if not main and noteChar == name then main = noteMain end
+        return name, "friend", main, noteChar == name and noteIsMain or nil
+    end
     if A.Sync then
         local char, main = A.Sync:Character(key)
         if char then return char, "addon", main end
     end
+    if noteChar then return noteChar, "note", noteMain, noteIsMain end
 end
 
 -------------------------------------------------------------------------------

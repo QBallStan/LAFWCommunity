@@ -80,7 +80,7 @@ function A:Test()
                 Say("  Member fields: " .. table.concat(keys, ", "))
             end
             for _, m in ipairs(entry.members) do
-                Say(("  %s%s -> %s%s"):format(tostring(m.fields.name), m.fields.isSelf == "true" and " (you)" or "",
+                Say(("  %s%s -> %s%s"):format(tostring(m.fields.memberNote and ("note: " .. m.fields.memberNote) or m.fields.name), m.fields.isSelf == "true" and " (you)" or "",
                     m.shownAs or "BattleTag kept", m.source and (" (" .. m.source .. ")") or ""))
             end
         end
@@ -166,6 +166,9 @@ function A:Test()
             self.Sync:InForever(key) and ", in Forever now" or ""))
     end
     if n == 0 then Say("  no other member's addon heard yet") end
+    local ns = self.Notes and self.Notes.stats or {}
+    Say(("Member note: %s%s"):format(ns.last and ('"' .. ns.last .. '"') or "not written this session",
+        ns.lastError and (" |cffff6060(" .. ns.lastError .. ")|r") or ""))
 
     local CC = self.CommunityChat
     local number = CC:ChannelNumber(false)
@@ -175,8 +178,6 @@ function A:Test()
         CC.stats.added == true and "added" or (CC.stats.added == false and "|cffff6060not added|r" or "not tried yet"),
         CC.stats.addedVia and (" (" .. CC.stats.addedVia .. ")") or "",
         CC.stats.slashTaken and "|cffff6060also claimed by another addon|r" or "ready", CC.stats.switched + CC.stats.slashSends))
-    local p = self.Me:Professions()
-    Say("Your professions: " .. (p or "none found"))
 
     test.lines = out
     self.db.test = test

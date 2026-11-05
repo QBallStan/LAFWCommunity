@@ -39,29 +39,6 @@ function A:Refresh()
             if faction == "Unknown" and info.isSelf then
                 faction = UnitFactionGroup("player") or "Unknown"
             end
-            local professions={}
-            for _,field in ipairs({"profession1Name","profession2Name"}) do
-                if type(info[field])=="string" and info[field]~="" then professions[#professions+1]=info[field] end
-            end
-            self.db.professions=self.db.professions or {}
-            if info.isSelf and type(GetProfessions)=="function" and type(GetProfessionInfo)=="function" then
-                local ok,first,second=pcall(GetProfessions)
-                if ok then
-                    professions={}
-                    for _,index in pairs({first,second}) do
-                        local success,name,_,skill,maxSkill=pcall(GetProfessionInfo,index)
-                        if success and name then
-                            local rank=type(skill)=="number" and (" "..skill..(type(maxSkill)=="number" and "/"..maxSkill or "")) or ""
-                            professions[#professions+1]=name..rank
-                        end
-                    end
-                end
-            end
-            local professionText=#professions>0 and table.concat(professions," - ") or nil
-            if info.guid then
-                if professionText then self.db.professions[info.guid]={text=professionText,updatedAt=time()}
-                elseif self.db.professions[info.guid] then professionText=self.db.professions[info.guid].text end
-            end
             local class = info.classID and GetClassInfo(info.classID)
             local presence = Enum and Enum.ClubMemberPresence
             local online
@@ -69,7 +46,7 @@ function A:Refresh()
                 online = info.presence ~= presence.Offline and info.presence ~= presence.Unknown
             end
             local row = { name = info.name or "Unknown", faction = faction,
-                level = info.level, memberId = memberId, class = class, online = online, professions = professionText }
+                level = info.level, memberId = memberId, class = class, online = online }
             -- A Blizzard Group lists BattleTags: show the character instead,
             -- with what we know of it and of the member's other characters.
             if self.BN and self.BN:IsBattleNetClub(id) then pcall(self.FillBattleNetRow, self, row, info, id) end
@@ -90,12 +67,11 @@ end
 function A:FillBattleNetRow(row, info, clubId)
     local BN = self.BN
     row.battleTag = info.name
-    row.professions = nil
     local others
     -- The tab shows just the character, tagged (alt) or (main); the main's
     -- name is in the tooltip. Chat and the member list keep "Alt - Main".
-    local char, _, main = nil, nil, nil
-    if BN:Settings().enabled then char, _, main = BN:Resolve(info.bnetAccountId, info.name, clubId, info) end
+    local char, source, main, noteIsMain = nil, nil, nil, nil
+    if BN:Settings().enabled then char, source, main, noteIsMain = BN:Resolve(info.bnetAccountId, info.name, clubId, info) end
     if char then
         row.name = BN:Shown(char)
         row.mainName = main and BN:Shown(main) ~= row.name and main or nil
@@ -105,18 +81,19 @@ function A:FillBattleNetRow(row, info, clubId)
         local _, classFile = UnitClass("player")
         row.class, row.level = ClassName(classFile), UnitLevel("player")
         row.faction = UnitFactionGroup("player") or row.faction
-        row.professions = self.Me:Professions()
         others = self.Me:OthersHere()
         if char and not main and self.Me:MainKey() == self.Me:CurrentKey() then row.role = "main" end
     else
         local p = self.Sync and self.Sync:Peer(self.Sync:KeyFor(clubId, info) or info.name)
         -- Their addon's details only describe the character it announced.
         if p and (not char or char == p.char) then
-            row.class, row.level, row.professions = ClassName(p.class), p.level, p.profs
+            row.class, row.level = ClassName(p.class), p.level
             if p.faction == "Alliance" or p.faction == "Horde" then row.faction = p.faction end
             others = p.others
             if char and not main and p.onMain then row.role = "main" end
         end
+        -- Their member note says they're on their main.
+        if char and not main and noteIsMain then row.role = "main" end
     end
     -- Online but not in Forever: on the Battle.net phone app, a friend in
     -- another game (or another WoW), or a member whose addon has gone quiet.
@@ -164,7 +141,7 @@ function A:FillBattleNetRow(row, info, clubId)
     row.bnAlts = {}
     for _, o in ipairs(others or {}) do
         row.bnAlts[#row.bnAlts + 1] = { name = BN:Shown(o.name), role = o.isMain and "main" or nil,
-            class = ClassName(o.class), level = o.level, professions = o.profs,
+            class = ClassName(o.class), level = o.level,
             faction = o.faction or row.faction, online = false, memberId = row.memberId .. ":" .. o.name }
     end
 end
@@ -229,6 +206,7 @@ events:SetScript("OnEvent", function(_, event, name)
         if type(LAFWCommunityDB) ~= "table" then LAFWCommunityDB = {} end
         A.db = LAFWCommunityDB
         A.db.schemaVersion = 1
+        A.db.professions = nil   -- professions were dropped in 0.9.0
         SLASH_LAFWCOMMUNITY1 = "/lafw"
         SlashCmdList.LAFWCOMMUNITY = function(command)
             command = (command or ""):lower():match("^%s*(.-)%s*$")

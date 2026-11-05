@@ -7,11 +7,11 @@ Our community is a Blizzard Group, so both factions can be in it. Blizzard Group
 ## What it does
 
 - **Character names instead of BattleTags** in the community chat, the Communities member list and the LAFW tab. Pick your main once, and your other characters show as "Alt - Main".
-- **The LAFW tab** in the Communities window: each member's current character, their main, class and professions. Click a member to see their other characters, with their professions.
+- **The LAFW tab** in the Communities window: each member's current character, whether it's their main or an alt, and its class. Click a member to see their other characters.
 - **`/l` talks in the community**, like `/p` for party. The community chat is added to your General chat tab the first time; remove it there if you prefer (right-click the tab > Settings > Channels).
 - **Its own chat color**, picked so it doesn't look like whispers or any other chat.
 
-Names, professions and alts are shared between members who run the addon, so the more of us have it, the better it works. Your Battle.net friends' characters show even if they don't have it.
+Names and mains are shared between members who run the addon (through their member note in the group, whatever their server or faction), so the more of us have it, the better it works. Your Battle.net friends' characters show even if they don't have it.
 
 ## Install
 
