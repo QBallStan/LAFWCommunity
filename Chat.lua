@@ -85,40 +85,98 @@ function A:PickChatColor(ownType)
     end
     return best
 end
-function A:ColorCommunityChat()
-    if not self.db or not self.db.clubId or not C_Club or not C_Club.GetStreams then return end
+-- The color the community chat should have: yours (picked in the settings
+-- window or in Blizzard's chat settings), else the default.
+function A:CommunityColor(ownType)
+    local c=self.db and self.db.chatColor
+    if type(c)=="table" and type(c[1])=="number" then return c end
+    return self:PickChatColor(ownType)
+end
+
+-- Every chat channel the selected community's streams have right now:
+-- key ("club:stream"), channel number, chat type ("CHANNEL6").
+function A:CommunityChannels()
+    local list={}
+    if not self.db or not self.db.clubId or not C_Club or not C_Club.GetStreams then return list end
     local ok,streams=pcall(C_Club.GetStreams,self.db.clubId)
-    if not ok or type(streams)~="table" then return end
-    self.db.chatColors=self.db.chatColors or {}
+    if not ok or type(streams)~="table" then return list end
     for _,stream in ipairs(streams) do
         local channelName
         if ChatFrameUtil and ChatFrameUtil.GetCommunitiesChannelName then
             channelName=ChatFrameUtil.GetCommunitiesChannelName(self.db.clubId,stream.streamId)
         end
-        if channelName then
-            local channelId=GetChannelName(channelName)
-            if channelId and channelId>0 then
-                local key=tostring(self.db.clubId)..":"..tostring(stream.streamId)
-                local previous=self.db.chatColors[key]
-                local chatType="CHANNEL"..channelId
-                local info=ChatTypeInfo[chatType]
-                -- Set a default once per stream/channel assignment, preserving later personal color changes.
-                -- A color this addon set before is replaced once, unless you've recolored it since.
-                local stillOurs=false
-                if previous and (previous.v or 0)<3 and info then
-                    for _,c in ipairs(OLD_COLORS) do if Near(info.r,info.g,info.b,c) then stillOurs=true end end
-                end
-                if info and (not previous or previous.channelId~=channelId or stillOurs) then
-                    local c=self:PickChatColor(chatType)
-                    ChangeChatColor(chatType,c[1],c[2],c[3])
-                    self.db.chatColors[key]={channelId=channelId,v=3}
-                elseif previous and (previous.v or 0)<3 then
-                    previous.v=3   -- recolored by you: keep it
-                end
+        local channelId=channelName and GetChannelName(channelName)
+        if type(channelId)=="number" and channelId>0 then
+            list[#list+1]={key=tostring(self.db.clubId)..":"..tostring(stream.streamId),
+                channelId=channelId,chatType="CHANNEL"..channelId}
+        end
+    end
+    return list
+end
+
+-- Paint the community's channels in `c`, noting what we set so a later
+-- change can be told apart as yours.
+function A:ApplyCommunityColor(c)
+    self.db.chatColors=self.db.chatColors or {}
+    for _,ch in ipairs(self:CommunityChannels()) do
+        local color=c or self:CommunityColor(ch.chatType)
+        if ChatTypeInfo[ch.chatType] then
+            ChangeChatColor(ch.chatType,color[1],color[2],color[3])
+            self.db.chatColors[ch.key]={channelId=ch.channelId,v=3,applied={color[1],color[2],color[3]}}
+        end
+    end
+end
+
+-- Colors are kept per channel number: when the community gets a new number
+-- (after joining or leaving other channels), its color moves with it, yours
+-- if you chose one.
+function A:ColorCommunityChat()
+    if not self.db then return end
+    self.db.chatColors=self.db.chatColors or {}
+    for _,ch in ipairs(self:CommunityChannels()) do
+        local previous=self.db.chatColors[ch.key]
+        local info=ChatTypeInfo[ch.chatType]
+        if info then
+            local moved=not previous or previous.channelId~=ch.channelId
+            -- Before 0.7.8: a color this addon set is replaced once; a color
+            -- you set by hand becomes your color.
+            local old=previous and not moved and (previous.v or 0)<3
+            local stillOurs=false
+            if old then for _,c in ipairs(OLD_COLORS) do if Near(info.r,info.g,info.b,c) then stillOurs=true end end end
+            if old and not stillOurs and not self.db.chatColor then self.db.chatColor={info.r,info.g,info.b} end
+            -- 0.7.7 didn't note what it set: what's there now is it.
+            if previous and not moved and not old and not previous.applied then
+                previous.applied={info.r,info.g,info.b}
+            end
+            if moved or stillOurs or (old and not previous.applied) then
+                local c=self:CommunityColor(ch.chatType)
+                ChangeChatColor(ch.chatType,c[1],c[2],c[3])
+                self.db.chatColors[ch.key]={channelId=ch.channelId,v=3,applied={c[1],c[2],c[3]}}
             end
         end
     end
 end
+
+-- You recolored the community in Blizzard's chat settings: remember it, so it
+-- follows the community to a new channel number and shows in our settings.
+function A:OnChatColorChanged(chatType,r,g,b)
+    if not self.db or type(chatType)~="string" or type(r)~="number" then return end
+    for _,ch in ipairs(self:CommunityChannels()) do
+        if ch.chatType==chatType then
+            local previous=self.db.chatColors and self.db.chatColors[ch.key]
+            local applied=previous and previous.applied
+            if not (applied and Near(r,g,b,applied)) then
+                self.db.chatColor={r,g,b}
+                if previous then previous.applied={r,g,b} end
+                if self.Me and self.Me.Render then pcall(self.Me.Render,self.Me) end
+            end
+        end
+    end
+end
+local colorWatch=CreateFrame("Frame")
+colorWatch:RegisterEvent("UPDATE_CHAT_COLOR")
+colorWatch:SetScript("OnEvent",function(_,_,chatType,r,g,b) pcall(A.OnChatColorChanged,A,chatType,r,g,b) end)
+
 local function Decorate(name,display,clubId)
     if not A.db or clubId~=A.db.clubId or type(name)~="string" or type(display)~="string" then return display end
     local links=ClubLinks(clubId)
