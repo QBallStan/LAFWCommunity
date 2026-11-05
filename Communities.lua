@@ -6,7 +6,8 @@ function A:MountAdvancedRoster()
     f:SetParent(host); f:ClearAllPoints(); f:SetScale(1)
     f:SetPoint("TOPLEFT",host,"TOPLEFT",197,-28)
     f:SetPoint("BOTTOMRIGHT",host,"BOTTOMRIGHT",-25,2)
-    f:SetFrameLevel(host:GetFrameLevel()+10)
+    -- Above Blizzard's (see-through) controls, so it takes every click.
+    f:SetFrameLevel(host:GetFrameLevel()+40)
     f:SetMovable(false)
     local width=math.max(300,f:GetWidth()-40)
     f.content:SetWidth(width)
@@ -68,15 +69,12 @@ function A:InstallCommunityIntegration()
         if wasEmbedded and A.window then A.window:Hide() end
         if A.altEditor then A.altEditor:Hide() end
         if A.hiddenNative then
-            for _,frame in ipairs(A.hiddenNative) do frame:Show() end
+            -- Fade Blizzard's controls back in. They were only made see-through,
+            -- never hidden: showing or hiding them (or switching the window's
+            -- view) from addon code taints the Communities window, and the game
+            -- then blocks Blizzard's own actions there, such as Set Note.
+            for frame, alpha in pairs(A.hiddenNative) do frame:SetAlpha(alpha) end
             A.hiddenNative=nil
-            -- Restore the selected native view after returning the temporarily hidden controls.
-            -- Showing the old Chat controls after Roster was selected caused overlapping UI.
-            local mode=host:GetDisplayMode()
-            if mode and host.SetDisplayMode then
-                host.displayMode=nil
-                host:SetDisplayMode(mode)
-            end
         end
     end
     local function Update()
@@ -96,7 +94,7 @@ function A:InstallCommunityIntegration()
         A.hiddenNative={}
         for _,key in ipairs({"MemberList","Chat","ChatEditBox","StreamDropdown","CommunitiesListDropdown","CommunityMemberListDropdown","GuildMemberListDropdown","VoiceChatHeadset","CommunitiesCalendarButton","CommunitiesControlFrame","InviteButton","ChatChannelDropdown","ChatChannelDropdownButton","StreamOptionsDropdown","AddToChatWindowDropdown"}) do
             local frame=host[key]
-            if frame and frame:IsShown() then A.hiddenNative[#A.hiddenNative+1]=frame; frame:Hide() end
+            if frame and frame.SetAlpha and not A.hiddenNative[frame] then A.hiddenNative[frame]=frame:GetAlpha(); frame:SetAlpha(0) end
         end
         -- Hide native header controls, including controls whose names differ by client build.
         local left,top=host:GetLeft(),host:GetTop()
@@ -104,10 +102,7 @@ function A:InstallCommunityIntegration()
             if child~=button and child~=A.window and child:IsShown() and child:GetLeft() and child:GetTop()
                 and left and top and child:GetLeft()>left+190 and child:GetLeft()<left+host:GetWidth()-30
                 and child:GetTop()>top-85 and child:GetTop()<top-25 and child:GetHeight()<70 then
-                local recorded=false
-                for _,saved in ipairs(A.hiddenNative) do if saved==child then recorded=true end end
-                if not recorded then A.hiddenNative[#A.hiddenNative+1]=child end
-                child:Hide()
+                if not A.hiddenNative[child] then A.hiddenNative[child]=child:GetAlpha(); child:SetAlpha(0) end
             end
         end
         button:SetChecked(true)
