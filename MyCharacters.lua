@@ -94,6 +94,7 @@ function Me:SetMain(key)
     if not c or not c.realm then return end
     d.mains[c.realm] = key
     if A.Sync then A.Sync:Announce(false) end
+    if A.Data then A.Data:Changed() end
     if A.Notes and Me.window and Me.window:IsShown() then Me:Render() end
     A:NamesChanged()
 end

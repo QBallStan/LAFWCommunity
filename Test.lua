@@ -161,11 +161,38 @@ function A:Test()
         n = n + 1
         local clubs = {}
         for club, member in pairs(p.clubs or {}) do clubs[#clubs + 1] = club .. ":" .. member end
-        Say(("  heard: %s (%s)%s%s"):format(tostring(p.char), tostring(p.faction or "?"),
+        Say(("  heard%s: %s (%s)%s%s"):format(p.source == "data" and " in LAFW data" or "", tostring(p.char), tostring(p.faction or "?"),
             #clubs > 0 and (", member " .. table.concat(clubs, ",")) or ", |cffff6060no group info (older version)|r",
             self.Sync:InForever(key) and ", in Forever now" or ""))
     end
     if n == 0 then Say("  no other member's addon heard yet") end
+    -- The LAFW data channel (Data.lua).
+    local D = self.Data
+    local ds = D.stats
+    if not D then
+    elseif not D.clubId then
+        Say("|cffff6060LAFW data channel: not found|r (the group owner adds a channel named \"LAFW data\")")
+    else
+        local filter = D:Filter()
+        local fname = tostring(filter)
+        if Enum and Enum.ClubStreamNotificationFilter then
+            for k, v in pairs(Enum.ClubStreamNotificationFilter) do if v == filter then fname = k end end
+        end
+        Say(("LAFW data channel: found in \"%s\"; subscribed %s; notifications %s; history %s (%d lines, %d yours)"):format(
+            tostring(D.clubName), tostring(D.subscribed), fname,
+            D.historyRead and (D.historyTimedOut and "none came" or "read") or "waiting", ds.history, ds.own))
+        local blocked = D.blocked or (self.db.data and self.db.data.blocked and self.db.data.blocked.what)
+        Say(("  posted %d line(s), removed %d old; %s%s"):format(ds.sent, ds.removed,
+            #D.queue > 0 and ("|cffffd100" .. #D.queue .. " waiting for a key press|r") or "nothing waiting",
+            blocked and (" |cffff6060- the game blocked " .. tostring(blocked) .. "|r") or ""))
+        local factions = {}
+        for f, n in pairs(ds.byFaction) do factions[#factions + 1] = f .. " " .. n end
+        Say(("  heard %d member line(s)%s, %d rejected"):format(ds.heard,
+            #factions > 0 and (" (" .. table.concat(factions, ", ") .. ")") or "", ds.rejected))
+        test.data = { found = true, subscribed = D.subscribed, filter = fname, history = ds.history, own = ds.own,
+            sent = ds.sent, removed = ds.removed, heard = ds.heard, byFaction = ds.byFaction, blocked = blocked,
+            waiting = #D.queue, timedOut = D.historyTimedOut }
+    end
     local want, have = self.Notes:Suggested(), self.Notes:Current()
     Say(("Your member note: %s%s"):format(have and ('"' .. have .. '"') or "none",
         want and (have == want and " (as it should be)" or (' |cffffd100- should be "' .. want .. '"|r')) or " (pick your main first)"))

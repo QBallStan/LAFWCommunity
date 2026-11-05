@@ -11,7 +11,7 @@ Our community is a Blizzard Group, so both factions can be in it. Blizzard Group
 - **`/l` talks in the community**, like `/p` for party. The community chat is added to your General chat tab the first time; remove it there if you prefer (right-click the tab > Settings > Channels).
 - **Its own chat color**, picked so it doesn't look like whispers or any other chat.
 
-Names and mains are shared between members who run the addon on the same server and faction. For everyone else, set your **member note** to your main once (the addon's settings window shows the exact text, e.g. `Main: Aldren Brightwater`): members on other servers and factions then see your main instead of your BattleTag. Your Battle.net friends' characters show even if they don't have it.
+Names, mains and alts are shared through a channel in the group called **LAFW data**, so every member who runs the addon sees everyone else's, whatever their server or faction. You never have to look at it: the addon keeps it out of your chat, turns its notifications off and marks it read. It only shows if you pick it in the Communities window. The addon posts there when you log in on a different character or change your main, right after your first key press or click (the game only lets addons post in a group then). Your Battle.net friends' characters show even if they don't run the addon.
 
 ## Install
 
@@ -25,10 +25,13 @@ To update, do the same with the newest release: replace the old `LAFWCommunity` 
 
 Click the **book button on your minimap** (or the *My characters* button in the LAFW tab):
 - under **Your main**, click *Set main* on your main. Every other character on the same server counts as its alt. A character shows up in the list once you've logged in on it with the addon;
-- set your **member note** as the window shows (right-click your name in the Communities window > Set Note), so members on other servers and factions see your main;
 - the other options are there too: first names only, show BattleTags, the community `/l` uses, the minimap button.
 
 Right-click the minimap button to open the roster.
+
+## For the group owner
+
+Add the channel once: in the Communities window, open the channel list at the top of the chat ("General") > **Create Channel**, name it `LAFW data`, and leave "Leaders and moderators only" unticked.
 
 ## Commands
 

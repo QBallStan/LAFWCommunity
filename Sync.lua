@@ -70,9 +70,14 @@ function Sync:KeyFor(clubId, info)
     local memberId = info.memberId
     if type(memberId) ~= "number" then return nil end
     local club = tostring(clubId)
+    -- Heard both on the hidden channel and in the LAFW data channel: the newest wins.
+    local best, bestAt
     for key, entry in pairs(Peers()) do
-        if type(entry.clubs) == "table" and entry.clubs[club] == memberId then return key end
+        if type(entry.clubs) == "table" and entry.clubs[club] == memberId and (not bestAt or (entry.at or 0) > bestAt) then
+            best, bestAt = key, entry.at or 0
+        end
     end
+    return best
 end
 
 local function Find(battleTag)
@@ -315,6 +320,8 @@ end
 -- nil: no way to tell (no addon, or we only just arrived ourselves).
 function Sync:InForever(battleTag)
     if not battleTag then return nil end
+    -- Someone known through the LAFW data channel: see Data.lua.
+    if A.Data and A.Data:Owns(battleTag) then return A.Data:InForever(battleTag) end
     local now = GetTime()
     for key, at in pairs(self.seen) do
         if A.BN.SameTag(key, battleTag) then
