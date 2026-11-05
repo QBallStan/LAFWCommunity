@@ -5,6 +5,8 @@
 -- faction. A Blizzard Group's channels reach every member, whatever their
 -- faction or server, and keep their history. So the group owner adds one
 -- channel named "LAFW data", and each copy of the addon:
+--   - says hello when you log in: posts your line, and everyone online with
+--     the addon answers by posting theirs, so their lines are fresh;
 --   - posts a short line about you (character, main, level, professions, and
 --     your other characters on this server) when that changes: a new
 --     character, a new main, a level or a skill up (those at most every 10
@@ -19,7 +21,8 @@
 --
 -- Line: "LAFW1 <seq> <part>/<parts> <payload chunk>", the payload being
 --   "1~Char~Realm~Faction~CLASS~Level~Main~OnMain~InviteName~Alt:CLASS:Level:IsMain:Profs,...~Profs"
--- (Profs came in 0.11.0; older lines simply lack them.)
+-- then "~1" on a hello (a login: others answer) or "~0" on anything else.
+-- (Profs came in 0.11.0, the hello flag in 0.12.0; older lines simply lack them.)
 -------------------------------------------------------------------------------
 local ADDON, A = ...
 local Data = {}
@@ -33,6 +36,8 @@ local MAX_OTHERS = 15
 local RECENT = 6 * 3600          -- a line this recent says "in Forever", if they're still online
 local MAX_CLEANUP = 40           -- own old lines removed per session, at most
 local AUTO_GAP = 600             -- level and skill ups are shared at most this often (seconds)
+local HELLO_GAP = 120            -- no new "hello" if we posted this recently (a quick /reload)
+local REPLY_GAP = 120            -- answer someone's hello only if our last post is older than this
 
 Data.stats = { sent = 0, heard = 0, history = 0, rejected = 0, own = 0, removed = 0, byFaction = {} }
 Data.queue = {}                  -- actions waiting for a key press or click
@@ -144,7 +149,7 @@ function Data.Lines(payload, seq)
 end
 
 -- Post if what we'd say differs from our last line in the channel.
-function Data:Update(force)
+function Data:Update(force, hello)
     if not self.clubId or not self.historyRead or self.stopped then return end
     local payload = self:Payload()
     if not payload then return end
@@ -158,7 +163,7 @@ function Data:Update(force)
     self.lastSeq = seq
     seq = tostring(seq)
     local clubId, streamId = self.clubId, self.streamId
-    for _, line in ipairs(Data.Lines(payload, seq)) do
+    for _, line in ipairs(Data.Lines(payload .. (hello and "~1" or "~0"), seq)) do
         self:Queue(function()
             local ok = pcall(C_Club.SendMessage, clubId, streamId, line)
             if ok then Data.stats.sent = Data.stats.sent + 1 end
@@ -241,7 +246,7 @@ local function MessageTime(info)
 end
 
 function Data.Parse(payload)
-    local v, char, realm, faction, class, level, main, onMain, invite, alts, profs = strsplit("~", payload)
+    local v, char, realm, faction, class, level, main, onMain, invite, alts, profs, hello = strsplit("~", payload)
     if v ~= "1" then return nil end
     char = A.BN.CleanName(char)
     if not char then return nil end
@@ -251,6 +256,7 @@ function Data.Parse(payload)
         faction = (faction == "Alliance" or faction == "Horde") and faction or nil,
         class = CleanClass(class), level = CleanLevel(level), onMain = onMain == "1" or nil,
         inviteName = CleanInvite(invite), profs = CleanProfs(profs), others = {} }
+    entry.hello = hello == "1" or nil
     for alt in (alts or ""):gmatch("[^,]+") do
         local name, c, l, isMain, p = strsplit(":", alt)
         name = A.BN.CleanName(name)
@@ -287,7 +293,11 @@ function Data:OnLine(info, live)
     self.parts[mkey] = nil
     local entry = Data.Parse(table.concat(p.got))
     if not entry then self.stats.rejected = self.stats.rejected + 1; return end
+    local hello = entry.hello
+    entry.hello = nil
     self:Store(self.clubId, memberId, entry, at, live)
+    -- Someone just logged in: answer with our line (once for a burst of logins).
+    if hello and live then self:Reply() end
 end
 
 function Data:Store(clubId, memberId, entry, at, live)
@@ -335,7 +345,9 @@ function Data:ReadHistory()
     end
     if not self.historyRead then
         self.historyRead = true
-        self:Update()
+        -- Logging in: say hello (others answer), unless we just did (a quick /reload).
+        local last = DB().postedAt[StreamKey(self.clubId, self.streamId)]
+        if last and time() - last < HELLO_GAP then self:Update() else self:Update(true, true) end
         self:CleanUp()
     end
 end
@@ -441,6 +453,16 @@ function Data:Changed(auto)
         end
     end
     self:Update()
+end
+
+-- Someone said hello: post our line, unless we posted moments ago or a post
+-- is already on its way.
+function Data:Reply()
+    if self.stopped or not self.historyRead or self.pendingPayload then return end
+    local last = DB().postedAt[StreamKey(self.clubId, self.streamId)]
+    if last and time() - last < REPLY_GAP then return end
+    self.stats.replies = (self.stats.replies or 0) + 1
+    self:Update(true)
 end
 
 -- The "Share now" button: post right away (the click lets us).

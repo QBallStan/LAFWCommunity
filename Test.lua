@@ -187,8 +187,8 @@ function A:Test()
             blocked and (" |cffff6060- the game blocked " .. tostring(blocked) .. "|r") or ""))
         local factions = {}
         for f, n in pairs(ds.byFaction) do factions[#factions + 1] = f .. " " .. n end
-        Say(("  heard %d member line(s)%s, %d rejected"):format(ds.heard,
-            #factions > 0 and (" (" .. table.concat(factions, ", ") .. ")") or "", ds.rejected))
+        Say(("  heard %d member line(s)%s, %d rejected; answered %d hello(s)"):format(ds.heard,
+            #factions > 0 and (" (" .. table.concat(factions, ", ") .. ")") or "", ds.rejected, ds.replies or 0))
         test.data = { found = true, subscribed = D.subscribed, filter = fname, history = ds.history, own = ds.own,
             sent = ds.sent, removed = ds.removed, heard = ds.heard, byFaction = ds.byFaction, blocked = blocked,
             waiting = #D.queue, timedOut = D.historyTimedOut }
