@@ -182,7 +182,8 @@ function A:Test()
             tostring(D.clubName), tostring(D.subscribed), fname,
             D.historyRead and (D.historyTimedOut and "none came" or "read") or "waiting", ds.history, ds.own))
         local blocked = D.blocked or (self.db.data and self.db.data.blocked and self.db.data.blocked.what)
-        Say(("  posted %d line(s), removed %d old; %s%s"):format(ds.sent, ds.removed,
+        Say(("  posted %d line(s), removed %d old, %d send error(s)%s; %s%s"):format(ds.sent, ds.removed, ds.sendErrors or 0,
+            D.lastSendError and (" (" .. D.lastSendError .. ")") or "",
             #D.queue > 0 and ("|cffffd100" .. #D.queue .. " waiting for a key press|r") or "nothing waiting",
             blocked and (" |cffff6060- the game blocked " .. tostring(blocked) .. "|r") or ""))
         local factions = {}

@@ -165,6 +165,7 @@ function Data:Update(force, hello)
     local clubId, streamId = self.clubId, self.streamId
     for _, line in ipairs(Data.Lines(payload .. (hello and "~1" or "~0"), seq)) do
         self:Queue(function()
+            Data.lastSendAt = GetTime()
             local ok = pcall(C_Club.SendMessage, clubId, streamId, line)
             if ok then Data.stats.sent = Data.stats.sent + 1 end
             return ok
@@ -363,8 +364,44 @@ function Data:Start()
     self.subscribed = Call(C_Club.IsSubscribedToStream, clubId, streamId)
     if not input and not InCombatLockdown() then pcall(MakeInput) end
     self:Quiet(clubId, streamId)
-    local has = Call(C_Club.RequestMoreMessagesBefore, clubId, streamId, nil, HISTORY)
+    if self.subscribed then
+        self:RequestHistory()
+    else
+        self:Subscribe()
+        -- Never subscribed: carry on without history after a while.
+        C_Timer.After(20, function() if not Data.historyAsked then Data:RequestHistory() end end)
+    end
+    return true
+end
+
+-- The game only sends you a channel's messages, and lets you post in it,
+-- once you're subscribed to it, which normally happens when you open it in
+-- the Communities window. Do the same: focus it until the game subscribes
+-- us, then let go (the subscription stays).
+function Data:Subscribe()
+    if not self.clubId then return end
+    self.subscribing = true
+    self.stats.focused = (self.stats.focused or 0) + 1
+    Call(C_Club.FocusStream, self.clubId, self.streamId)
+end
+
+function Data:OnSubscribed()
+    self.subscribed = true
+    if self.subscribing then
+        self.subscribing = nil
+        -- Leave it focused if the Communities window is showing it.
+        local cf = CommunitiesFrame
+        if not (cf and cf.focusedClubId == self.clubId and cf.focusedStreamId == self.streamId) then
+            Call(C_Club.UnfocusStream, self.clubId, self.streamId)
+        end
+    end
+    if not self.historyAsked then self:RequestHistory() end
+    if self.retryPost then self.retryPost = nil; self.pendingPayload = nil; self:Update(true) end
+end
+
+function Data:RequestHistory()
     self.historyAsked = true
+    local has = Call(C_Club.RequestMoreMessagesBefore, self.clubId, self.streamId, nil, HISTORY)
     if has then self:ReadHistory() end
     -- No history after a while (an empty channel, or none came): go on without it.
     C_Timer.After(15, function()
@@ -373,7 +410,6 @@ function Data:Start()
             Data:ReadHistory()
         end
     end)
-    return true
 end
 
 local events = CreateFrame("Frame")
@@ -382,6 +418,9 @@ events:RegisterEvent("CLUB_STREAM_ADDED")
 events:RegisterEvent("CLUB_STREAMS_LOADED")
 events:RegisterEvent("CLUB_MESSAGE_ADDED")
 events:RegisterEvent("CLUB_MESSAGE_HISTORY_RECEIVED")
+events:RegisterEvent("CLUB_STREAM_SUBSCRIBED")
+events:RegisterEvent("CLUB_STREAM_UNSUBSCRIBED")
+events:RegisterEvent("CLUB_ERROR")
 events:RegisterEvent("CLUB_MEMBER_PRESENCE_UPDATED")
 events:RegisterEvent("ADDON_ACTION_BLOCKED")
 events:RegisterEvent("ADDON_ACTION_FORBIDDEN")
@@ -402,6 +441,27 @@ events:SetScript("OnEvent", function(_, event, a1, a2, a3)
                 pcall(Data.OnLine, Data, info, true)
             end
             Data:MarkRead()
+        end
+    elseif event == "CLUB_STREAM_SUBSCRIBED" then
+        if a1 == Data.clubId and a2 == Data.streamId then pcall(Data.OnSubscribed, Data) end
+    elseif event == "CLUB_STREAM_UNSUBSCRIBED" then
+        if a1 == Data.clubId and a2 == Data.streamId then
+            Data.subscribed = false
+            C_Timer.After(2, function() if not Data.subscribed then Data:Subscribe() end end)
+        end
+    elseif event == "CLUB_ERROR" then
+        -- "Couldn't send message" right after one of ours: subscribe and post again.
+        if Data.lastSendAt and GetTime() - Data.lastSendAt < 5 then
+            Data.stats.sendErrors = (Data.stats.sendErrors or 0) + 1
+            Data.lastSendError = tostring(a2)
+            Data.pendingPayload = nil
+            wipe(Data.queue)
+            if not Data.retried then
+                Data.retried = true
+                Data.retryPost = true
+                Data.subscribed = Call(C_Club.IsSubscribedToStream, Data.clubId, Data.streamId)
+                if Data.subscribed then Data:OnSubscribed() else Data:Subscribe() end
+            end
         end
     elseif event == "CLUB_MESSAGE_HISTORY_RECEIVED" then
         if a1 == Data.clubId and a2 == Data.streamId then pcall(Data.ReadHistory, Data) end
@@ -470,6 +530,15 @@ function Data:ShareNow()
     if self.stopped then A:Message("The game blocked sharing this session; it'll try again after a /reload."); return end
     if not self.clubId then pcall(self.Start, self) end
     if not self.clubId then A:Message("Your group has no \"LAFW data\" channel yet: the group owner adds it once."); return end
+    self.retried = nil
+    if not self.subscribed and not Call(C_Club.IsSubscribedToStream, self.clubId, self.streamId) then
+        -- Not subscribed yet: post once the game subscribes us.
+        self.retryPost = true
+        if not self.subscribing then self:Subscribe() end
+        A:Message("Connecting to the LAFW data channel; your characters go out on your next key press or click.")
+        return
+    end
+    self.subscribed = true
     if not self.historyRead then pcall(self.ReadHistory, self) end
     self.pendingPayload = nil
     self:Update(true)
@@ -480,6 +549,7 @@ end
 function Data:Status()
     if self.stopped or self.blocked then return "|cffff6060blocked by the game this session|r", false end
     if not self.clubId then return "|cff9a9a9ano \"LAFW data\" channel in your group yet|r", true end
+    if not self.subscribed then return "|cffffd100connecting to the LAFW data channel...|r", true end
     if #self.queue > 0 then return "|cffffd100sending, on your next key press or click|r", true end
     local at = DB().postedAt[StreamKey(self.clubId, self.streamId)]
     if not at then
