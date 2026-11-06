@@ -96,6 +96,8 @@ local function Tooltip(card)
         for _, c in ipairs(row.chars) do
             local color = c.class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[c.class]
             local right = (c.className or "") .. (c.level and (" " .. c.level) or "") .. (c.faction and (", " .. c.faction) or "")
+            if (c.played or 0) >= 3600 then right = right .. (" - %d h"):format(math.floor(c.played / 3600))
+            elseif (c.played or 0) >= 60 then right = right .. (" - %d min"):format(math.floor(c.played / 60)) end
             GameTooltip:AddDoubleLine(c.name, right, color and color.r or 1, color and color.g or 1, color and color.b or 1, .7, .7, .7)
         end
     end

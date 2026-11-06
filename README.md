@@ -7,7 +7,7 @@ Our community is a Blizzard Group, so both factions and every server can be in i
 ## What it does
 
 - **Character names instead of BattleTags**, in the group chat, the Communities member list and the LAFW tab. The game tells the addon which character every online member is playing, on any server or faction, and nobody needs to set anything up.
-- **Offline members** show by the last character you saw them on.
+- **Offline members** show by the character you've seen them play the most.
 - **Their characters:** hover a member in the LAFW tab to see every character the addon has seen them play.
 - **The LAFW tab** in the Communities window: everyone's character, class, level, zone, faction and status (online, away, busy, on the Battle.net app, in another game, offline), a faction filter, and right-click to invite someone playing Forever.
 - **Login and logout alerts** in chat, like guild members': "Pally Dude has come online."

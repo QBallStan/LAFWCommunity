@@ -116,8 +116,10 @@ function A:FillBattleNetRow(row, info, clubId)
         return
     end
     if row.where == "elsewhere" and row.online then row.detail = "In another game" end
-    -- Not in Forever right now: what we saw last.
-    local last, at = self.Seen:Last(clubId, row.memberId)
+    -- Not in Forever right now: the character they play the most, and when
+    -- they were last seen.
+    local last = self.Seen:Usual(clubId, row.memberId)
+    local _, at = self.Seen:Last(clubId, row.memberId)
     if last then
         row.faction = last.faction
         local what = (last.className or ClassName(last.class) or "") .. (last.level and (" " .. last.level) or "")

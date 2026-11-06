@@ -4,7 +4,7 @@
 -- A Blizzard Group (a Battle.net community) shows each member by BattleTag.
 -- The game tells addons which character each online member is playing
 -- (not only Battle.net friends), so this shows that character instead;
--- offline members show by the last character the addon saw them on.
+-- offline members show by the character the addon has seen them play most.
 -- Anyone never seen keeps their BattleTag. Only the shown text changes: clicking
 -- the name still whispers or opens the menu for the right person.
 -------------------------------------------------------------------------------
@@ -254,8 +254,8 @@ end
 
 -- What to show for a member instead of their BattleTag, and where it came
 -- from: you ("self"), the character the game says they're playing
--- ("game"), or for someone offline the last character this addon saw them
--- on ("seen"). Also returns the character's name. nil: keep the BattleTag.
+-- ("game"), or for someone offline the character this addon has seen them
+-- play the most ("seen"). Also returns the character's name. nil: keep the BattleTag.
 -- Every character seen is remembered (A.Seen), for the alts in tooltips
 -- and for naming members while they're offline.
 function BN:Resolve(bnetAccountID, battleTag, clubId, member)
@@ -285,8 +285,9 @@ function BN:Resolve(bnetAccountID, battleTag, clubId, member)
     -- In another WoW version: the game still names the character.
     local char = self:FriendCharacter(bnetAccountID, battleTag)
     if char then return self:Shown(char), "game", char end
-    local last = Seen and clubId and memberId and Seen:Last(clubId, memberId)
-    if last then return self:Shown(last.name), "seen", last.name end
+    -- Offline: the character they play the most.
+    local usual = Seen and clubId and memberId and Seen:Usual(clubId, memberId)
+    if usual then return self:Shown(usual.name), "seen", usual.name end
 end
 
 -------------------------------------------------------------------------------

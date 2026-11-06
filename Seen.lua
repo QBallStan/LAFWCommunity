@@ -1,8 +1,9 @@
 -------------------------------------------------------------------------------
 -- Characters seen. Whenever the game reports which character a member is
--- playing, it's remembered (in your saved variables, per group member), so
--- the addon can list a member's other characters and name members while
--- they're offline. Each copy of the addon learns this by itself: it knows
+-- playing, it's remembered (in your saved variables, per group member) with
+-- how long it's been seen played, so the addon can list a member's
+-- characters and name members while they're offline by the one they play
+-- most. Each copy of the addon learns this by itself: it knows
 -- the characters it has seen members on while you were online.
 -------------------------------------------------------------------------------
 local _, A = ...
@@ -29,7 +30,11 @@ function Seen:Record(clubId, memberId, c)
     e.className = c.className or e.className
     e.level = c.level or e.level
     e.faction = c.faction or e.faction
-    e.at = time()
+    -- Time seen playing it: the time since it was last seen, when that's
+    -- a short gap (the addon looks every minute while you're online).
+    local now = time()
+    if m.last == ck and e.at and now - e.at <= 180 then e.played = (e.played or 0) + (now - e.at) end
+    e.at = now
     m.chars[ck] = e
     m.last, m.at = ck, e.at
 end
@@ -40,6 +45,20 @@ function Seen:Last(clubId, memberId)
     local m = DB()[Key(clubId, memberId)]
     local e = m and m.last and m.chars[m.last]
     if e then return e, m.at end
+end
+
+-- The character they've been seen playing the longest (ties: the latest),
+-- to name them while they're offline.
+function Seen:Usual(clubId, memberId)
+    if not A.db or not clubId or not memberId then return nil end
+    local m = DB()[Key(clubId, memberId)]
+    if not m then return nil end
+    local best = m.last and m.chars[m.last]
+    for _, e in pairs(m.chars) do
+        local p, bp = e.played or 0, best and (best.played or 0)
+        if not best or p > bp or (p == bp and (e.at or 0) > (best.at or 0)) then best = e end
+    end
+    return best, m.at
 end
 
 -- Every character seen for them, most recently seen first.
