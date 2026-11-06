@@ -1,6 +1,7 @@
 -------------------------------------------------------------------------------
 -- Minimap button: left-click opens the settings window, right-click the
--- roster. Drag it around the minimap; its spot is saved.
+-- roster, hover for who's online. Drag it around the minimap; its spot is
+-- saved.
 -------------------------------------------------------------------------------
 local _, A = ...
 local M = {}
@@ -51,14 +52,23 @@ function M:Create()
     border:SetSize(52, 52); border:SetPoint("TOPLEFT")
 
     b:SetScript("OnClick", function(_, button)
-        if button == "RightButton" then A:Toggle() else A.Me:Toggle() end
+        if button == "RightButton" then A:Toggle() else A.Settings:Toggle() end
     end)
     b:SetScript("OnMouseDown", function() icon:SetPoint("CENTER", 1, 0) end)
     b:SetScript("OnMouseUp", function() icon:SetPoint("CENTER", 0, 1) end)
     b:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_LEFT")
         GameTooltip:SetText("LAFW Community")
-        GameTooltip:AddLine("|cffffd100Left-click|r settings and your main", 1, 1, 1)
+        -- Who's online in the group.
+        local online = A.Presence and A.Presence:Online() or {}
+        GameTooltip:AddLine(#online .. " online", .2, 1, .4)
+        for i, m in ipairs(online) do
+            if i > 25 then GameTooltip:AddLine(("and %d more"):format(#online - 25), .65, .65, .65); break end
+            local c = A.StatusColor and A.StatusColor({ online = true, presence = m.presence }) or { 1, 1, 1 }
+            GameTooltip:AddDoubleLine(tostring(m.name), m.status ~= "Online" and m.status or "", 1, 1, 1, c[1], c[2], c[3])
+        end
+        GameTooltip:AddLine(" ")
+        GameTooltip:AddLine("|cffffd100Left-click|r settings and your name", 1, 1, 1)
         GameTooltip:AddLine("|cffffd100Right-click|r roster", 1, 1, 1)
         GameTooltip:AddLine("|cffffd100Drag|r to move", 1, 1, 1)
         GameTooltip:Show()

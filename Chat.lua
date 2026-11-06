@@ -172,7 +172,7 @@ function A:OnChatColorChanged(chatType,r,g,b)
             if not (applied and Near(r,g,b,applied)) then
                 self.db.chatColor={r,g,b}
                 if previous then previous.applied={r,g,b} end
-                if self.Me and self.Me.Render then pcall(self.Me.Render,self.Me) end
+                if self.Settings and self.Settings.Render then pcall(self.Settings.Render,self.Settings) end
             end
         end
     end

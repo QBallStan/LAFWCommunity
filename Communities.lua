@@ -9,12 +9,8 @@ function A:MountAdvancedRoster()
     -- Above Blizzard's (see-through) controls, so it takes every click.
     f:SetFrameLevel(host:GetFrameLevel()+40)
     f:SetMovable(false)
-    local width=math.max(300,f:GetWidth()-40)
-    f.content:SetWidth(width)
-    for _,card in ipairs(f.cards) do
-        card:SetWidth(width)
-        card.arrow:ClearAllPoints(); card.arrow:SetPoint("TOPRIGHT",card,"TOPRIGHT",-12,-6)
-    end
+    f.content:SetWidth(math.max(300,f:GetWidth()-40))
+    A:Draw()
 end
 function A:InstallCommunityIntegration()
     local host=CommunitiesFrame
@@ -59,7 +55,7 @@ function A:InstallCommunityIntegration()
     button:SetCheckedTexture("Interface\\Buttons\\CheckButtonHilight")
     button:GetCheckedTexture():SetBlendMode("ADD")
     button:SetScript("OnEnter",function(self)
-        GameTooltip:SetOwner(self,"ANCHOR_RIGHT"); GameTooltip:SetText("Advanced Roster"); GameTooltip:Show()
+        GameTooltip:SetOwner(self,"ANCHOR_RIGHT"); GameTooltip:SetText("LAFW Community"); GameTooltip:Show()
     end)
     button:SetScript("OnLeave",function() GameTooltip:Hide() end)
     local function Leave()

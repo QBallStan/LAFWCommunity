@@ -2,16 +2,17 @@
 
 The Love At First Wipe community addon for **World of Warcraft: Forever**.
 
-Our community is a Blizzard Group, so both factions can be in it. Blizzard Groups show everyone by BattleTag; this addon shows the characters people are actually playing, and a few more things that make the group feel like a guild.
+Our community is a Blizzard Group, so both factions and every server can be in it. Blizzard Groups show everyone by BattleTag; this addon shows the name each member chose instead, and a few things that make the group feel more like a guild.
 
 ## What it does
 
-- **Character names instead of BattleTags** in the community chat, the Communities member list and the LAFW tab. Pick your main once, and your other characters show as "Alt - Main".
-- **The LAFW tab** in the Communities window: each member's current character, whether it's their main or an alt, its class and professions. Click a member to see their other characters.
-- **`/l` talks in the community**, like `/p` for party. The community chat is added to your General chat tab the first time; remove it there if you prefer (right-click the tab > Settings > Channels).
-- **Its own chat color**, picked so it doesn't look like whispers or any other chat.
-
-Names, mains, alts, levels and professions are shared through a channel in the group called **LAFW data**, so every member who runs the addon sees everyone else's, whatever their server or faction. You never have to look at it: the addon keeps it out of your chat, turns its notifications off and marks it read. It only shows if you pick it in the Communities window. When you log in, the addon posts your line there, and everyone online with the addon answers with theirs, so you get everyone's latest. It also posts when you change your main, and when you level or skill up (at most every 10 minutes). Posts go out right after your next key press or click (the game only lets addons post in a group then). *Share now* in the settings window posts right away. Your Battle.net friends' characters show even if they don't run the addon.
+- **Your chosen name instead of your BattleTag**, in the group chat, the Communities member list and the LAFW tab. The name is your **member note** in the group, so everyone with the addon sees it, whatever their server or faction.
+- **Battle.net friends** who haven't set a name show by the character they're playing.
+- **Login and logout alerts** in chat, like guild members': "Pallydude has come online."
+- **The LAFW tab** in the Communities window: everyone's name and status (online, away, busy, on the Battle.net app, offline). For your Battle.net friends also what they're playing and where, and right-click to invite them.
+- **Who's online** when you hover the minimap button.
+- **`/l` talks in the group**, like `/p` for party. The group chat is added to your General chat tab the first time; remove it there if you prefer (right-click the tab > Settings > Channels).
+- **Its own chat color**, picked so it doesn't look like whispers or any other chat. Change it in the settings.
 
 ## Install
 
@@ -21,17 +22,14 @@ Names, mains, alts, levels and professions are shared through a channel in the g
 
 To update, do the same with the newest release: replace the old `LAFWCommunity` folder.
 
-## First time in game
+## Set your name (once)
 
-Click the **book button on your minimap** (or the *My characters* button in the LAFW tab):
-- under **Your main**, click *Set main* on your main. Every other character on the same server counts as its alt. A character shows up in the list once you've logged in on it with the addon;
-- the other options are there too: first names only, show BattleTags, the community `/l` uses, the minimap button.
+1. Click the **book button on your minimap**. Under *Your name in the group*, type the name you want (your main's name is a good choice) and press **Ctrl+C**.
+2. In the Communities window, right-click **your own name** in the member list > **Set Note**, paste with **Ctrl+V** and accept.
+
+That's it: everyone running the addon now sees you by that name. The game doesn't let addons set the note for you, which is why it's a copy and paste.
 
 Right-click the minimap button to open the roster.
-
-## For the group owner
-
-Add the channel once: in the Communities window, open the channel list at the top of the chat ("General") > **Create Channel**, name it `LAFW data`, and leave "Leaders and moderators only" unticked.
 
 ## Commands
 

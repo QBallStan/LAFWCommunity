@@ -1,16 +1,13 @@
 -------------------------------------------------------------------------------
--- Character names in Blizzard Groups.
+-- Display names in Blizzard Groups.
 --
--- A Blizzard Group (a Battle.net community) shows each sender by BattleTag.
--- This shows the character they are playing instead, wherever it can be
--- known:
---   * you: your current character (and your main, from /lafw main);
---   * your Battle.net friends: the character the game already reports for
---     them (they need nothing installed);
---   * other members running LAFW Community: their addon announces its
---     character on a hidden chat channel (A.Sync, below).
--- Members who set a main in their addon show as "Alt - Main" while on an
--- alt. Anyone else keeps their BattleTag. Only the shown text changes: clicking
+-- A Blizzard Group (a Battle.net community) shows each member by BattleTag.
+-- This shows instead:
+--   * the member's own member note, as the name they chose (works whatever
+--     their server or faction: the group keeps the note);
+--   * otherwise, for your Battle.net friends, the character they're playing;
+--   * otherwise, for you, your current character.
+-- Anyone else keeps their BattleTag. Only the shown text changes: clicking
 -- the name still whispers or opens the menu for the right person.
 -------------------------------------------------------------------------------
 local _, A = ...
@@ -147,7 +144,7 @@ function BN:ForgetClubTypes() wipe(clubTypeCache) end
 
 -------------------------------------------------------------------------------
 -- The character of one Battle.net account
--- Returns name, source ("self" / "friend" / "addon") or nil.
+-- Returns their character name, or nil.
 -------------------------------------------------------------------------------
 local function FromFriendAccount(info)
     if type(info) ~= "table" then return nil end
@@ -222,8 +219,6 @@ function BN:FriendWhere(bnetAccountID, battleTag)
     return nil
 end
 
--- Returns character, source ("self" / "friend" / "addon"), main (nil when
--- unknown, or when they are on their main).
 -- The group's own entry for this sender: found by account ID, else by name.
 -- Its isSelf is the reliable way to know a message is yours (the group's
 -- account IDs need not match BNGetInfo's).
@@ -244,50 +239,34 @@ function BN:Member(clubId, bnetAccountID, battleTag)
     return byName
 end
 
--- A member note written by the addon (Notes.lua):
---   "Char (alt of Main)" / "Char (main)" / "Char"
--- Returns char, main, isMain, or nil for a note that isn't one of ours
--- (WoW names are capitalized words, so "back on monday" doesn't count).
-local function Capitalized(name)
-    if not name then return nil end
-    local start = 1
-    while true do
-        local b = name:byte(start)
-        -- An uppercase ASCII letter, or a UTF-8 letter (accented capitals).
-        if not b or not ((b >= 65 and b <= 90) or b >= 0xC3) then return nil end
-        local s = name:find(SEP, start, true)
-        if not s then break end
-        start = s + #SEP
-    end
-    return name
-end
--- Returns char, main, isMain. "Main: Tachi Nightwatch" (set by hand, the
--- way the addon asks) gives only the main: nil, "Tachi Nightwatch", false.
+-- A member's display name: their member note in the group, which only they
+-- can set (right-click your name in the Communities window > Set Note). The
+-- whole note is the name; "Main: X" (what 0.9 asked for) gives X.
+-- Escape codes and control characters are dropped, and it's cut to 40
+-- characters.
+local MAX_NAME = 40
 function BN.ParseNote(note)
     note = Str(note)
-    if not note or #note > 120 then return nil end
-    local onlyMain = note:match("^%s*[Mm]ain%s*:%s*(.-)%s*$")
-    if onlyMain then
-        onlyMain = Capitalized(CleanName(onlyMain))
-        if onlyMain then return nil, onlyMain, false end
-        return nil
+    if not note then return nil end
+    note = note:gsub("|[cC]%x%x%x%x%x%x%x%x", ""):gsub("|[rR]", ""):gsub("||", "|"):gsub("|", ""):gsub("%c", " ")
+    note = note:match("^%s*(.-)%s*$")
+    note = note:match("^[Mm]ain%s*:%s*(.-)$") or note
+    if note == "" then return nil end
+    -- Cut on a whole UTF-8 character.
+    local count, cut = 0, #note
+    for pos in note:gmatch("()[^\128-\191]") do
+        count = count + 1
+        if count > MAX_NAME then cut = pos - 1; break end
     end
-    local char, main = note:match("^(.-) %(alt of (.-)%)$")
-    if char then
-        char, main = Capitalized(CleanName(char)), Capitalized(CleanName(main))
-        if char then return char, main ~= char and main or nil, false end
-        return nil
-    end
-    char = note:match("^(.-) %(main%)$")
-    if char then
-        char = Capitalized(CleanName(char))
-        if char then return char, nil, true end
-        return nil
-    end
-    char = Capitalized(CleanName(note))
-    if char then return char, nil, false end
+    note = note:sub(1, cut):match("^(.-)%s*$")
+    return note ~= "" and note or nil
 end
 
+-- What to show for a member instead of their BattleTag, and where it came
+-- from: their note ("note"), your own character when you have no note
+-- ("self"), a Battle.net friend's character ("friend"). Also returns the
+-- character a friend (or you) is playing, for tooltips. nil: keep the
+-- BattleTag.
 function BN:Resolve(bnetAccountID, battleTag, clubId, member)
     local selfID, selfTag = self:Self()
     bnetAccountID = Num(bnetAccountID)
@@ -295,29 +274,16 @@ function BN:Resolve(bnetAccountID, battleTag, clubId, member)
     local isSelf = member and Safe(member.isSelf) == true
     if not isSelf then isSelf = (bnetAccountID and selfID and bnetAccountID == selfID) end
     if not isSelf and selfTag and battleTag then isSelf = SameTag(selfTag, battleTag) end
+    local noteName = BN.ParseNote(member and member.memberNote)
     if isSelf then
-        local name = BN.PlayerName()
-        if name then return name, "self", A.Me and CleanName(A.Me:MainForCurrent()) end
+        local char = BN.PlayerName()
+        if noteName then return noteName, "note", char end
+        if char then return self:Shown(char), "self", char end
+        return nil
     end
-    -- Their member note: reaches us whatever their server or faction.
-    local noteChar, noteMain, noteIsMain = BN.ParseNote(member and member.memberNote)
-    local name = self:FriendCharacter(bnetAccountID, battleTag)
-    -- Their addon, found by who they are in this group (names are masked).
-    local key = A.Sync and A.Sync:KeyFor(clubId, member) or battleTag
-    if name then
-        local main = A.Sync and A.Sync:MainFor(key, name)
-        -- "Main: X" names their main whatever they're on.
-        if not main and (noteChar == name or not noteChar) then main = noteMain end
-        if main == name then return name, "friend", nil, true end
-        return name, "friend", main, noteChar == name and noteIsMain or nil
-    end
-    if A.Sync then
-        local char, main = A.Sync:Character(key)
-        if char then return char, "addon", main or (not noteChar and noteMain ~= char and noteMain) or nil end
-    end
-    if noteChar then return noteChar, "note", noteMain, noteIsMain end
-    -- Only their main is known: show that rather than a BattleTag.
-    if noteMain then return noteMain, "note-main", nil, nil end
+    local char = self:FriendCharacter(bnetAccountID, battleTag)
+    if noteName then return noteName, "note", char end
+    if char then return self:Shown(char), "friend", char end
 end
 
 -------------------------------------------------------------------------------
@@ -332,16 +298,13 @@ end
 -- display: the link text Blizzard is about to show (may carry brackets and
 -- color codes); playerName: the BattleTag in it.
 -- The text to show for a member instead of their BattleTag, or nil to keep
--- it: "Alt - Main", as character communities showed before; full names, or
--- first names only. An alt that shows the same as its main shows once.
+-- it, with the BattleTag after it when that option is on.
 function BN:NameFor(bnetAccountID, battleTag, clubId, member)
     local cfg = self:Settings()
     battleTag = Str(battleTag)
     if not cfg.enabled or not battleTag then return nil end
-    local name, source, main = self:Resolve(bnetAccountID, battleTag, clubId, member)
-    if not name then return nil end
-    local alt, mainShown = self:Shown(name), self:Shown(main)
-    local shown = (mainShown and mainShown ~= alt) and (alt .. " - " .. mainShown) or alt
+    local shown = self:Resolve(bnetAccountID, battleTag, clubId, member)
+    if not shown then return nil end
     if cfg.showTag then
         shown = shown .. " (" .. (battleTag:match("^([^#]+)") or battleTag) .. ")"
     end
@@ -442,7 +405,7 @@ function BN:InstallMemberList()
     if box.ForEachFrame then Call(box.ForEachFrame, box, HookRow) end
 end
 
--- Repaint after names change (a setting, or a member's addon announcing).
+-- Repaint after names change (a setting, or a member's note).
 function BN:RefreshMemberList()
     local box = CommunitiesFrame and CommunitiesFrame.MemberList and CommunitiesFrame.MemberList.ScrollBox
     if box and box.ForEachFrame and CommunitiesFrame:IsShown() then
