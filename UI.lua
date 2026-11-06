@@ -1,7 +1,8 @@
 -------------------------------------------------------------------------------
 -- The roster: the LAFW tab in the Communities window (or its own window
 -- with /lafw). One line per member: status, name, what they're playing
--- (when the game tells: you and your Battle.net friends), and their status.
+-- (the game tells for everyone online; offline, the last character seen),
+-- faction, and status. Hover a member for every character seen for them.
 -------------------------------------------------------------------------------
 local _, A = ...
 local function Text(parent, size, x, y, width)
@@ -44,9 +45,12 @@ function A.StatusLabel(row)
     if row.where == "forever" then return "In Forever" end
     return "Online"
 end
-local function Matches(row, query)
+local function Matches(row, query, faction)
+    if faction ~= "All" and row.faction ~= faction then return false end
     if query == "" then return true end
-    return (tostring(row.name) .. " " .. (row.detail or "") .. " " .. (row.role or "")):lower():find(query, 1, true) ~= nil
+    local text = tostring(row.name) .. " " .. (row.detail or "") .. " " .. (row.role or "")
+    for _, c in ipairs(row.chars or {}) do text = text .. " " .. c.name end
+    return text:lower():find(query, 1, true) ~= nil
 end
 
 -- Right-click on a member: a small menu (Invite to group), greyed out with
@@ -70,7 +74,7 @@ function A:RowMenu(owner, row)
 end
 
 local ROW_H = 22
-local NAME_X, DETAIL_X = 20, 230
+local NAME_X, DETAIL_X = 38, 240
 
 local function Tooltip(card)
     local row = card.row
@@ -83,12 +87,17 @@ local function Tooltip(card)
     elseif row.online and row.where == "elsewhere" then status = status .. ", in another game" end
     GameTooltip:AddLine(status, c[1], c[2], c[3])
     if row.role then GameTooltip:AddLine(row.role, 1, .82, 0) end
-    if row.detail and row.detail ~= "" then GameTooltip:AddLine("Playing: " .. row.detail, .9, .9, .9, true) end
+    if row.detail and row.detail ~= "" then GameTooltip:AddLine(row.detail, .9, .9, .9, true) end
     if row.realm then GameTooltip:AddLine(row.realm .. (row.faction and (", " .. row.faction) or ""), .65, .65, .65) end
-    if row.battleTag and not row.named and not row.isSelf then
-        GameTooltip:AddLine("No name set: they can set one in their member note.", .65, .65, .65, true)
-    elseif row.isSelf and not row.named then
-        GameTooltip:AddLine("Others see your BattleTag: set your name in the settings (minimap button).", 1, .82, 0, true)
+    -- Every character seen for them.
+    if row.chars and #row.chars > 0 then
+        GameTooltip:AddLine(" ")
+        GameTooltip:AddLine(#row.chars == 1 and "Character" or "Characters", 1, .82, 0)
+        for _, c in ipairs(row.chars) do
+            local color = c.class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[c.class]
+            local right = (c.className or "") .. (c.level and (" " .. c.level) or "") .. (c.faction and (", " .. c.faction) or "")
+            GameTooltip:AddDoubleLine(c.name, right, color and color.r or 1, color and color.g or 1, color and color.b or 1, .7, .7, .7)
+        end
     end
     if row.battleTag and A.BN:Settings().showTag ~= true then GameTooltip:AddLine("BattleTag: " .. row.battleTag, .65, .65, .65) end
     if A:CanInvite(row) then GameTooltip:AddLine("Right-click to invite", .5, .8, 1) end
@@ -103,6 +112,7 @@ local function Card(f, i)
     card:SetBackdropColor(.7, .7, .7, base)
     card.dot = card:CreateTexture(nil, "ARTWORK"); card.dot:SetSize(7, 7); card.dot:SetPoint("LEFT", 8, 0)
     card.dot:SetTexture("Interface\\CHARACTERFRAME\\TempPortraitAlphaMask")
+    card.faction = card:CreateTexture(nil, "ARTWORK"); card.faction:SetSize(16, 16); card.faction:SetPoint("LEFT", 18, 0)
     card.name = Text(card, 12, NAME_X, -5)
     card.tag = Text(card, 10, 0, 0); card.tag:ClearAllPoints(); card.tag:SetPoint("LEFT", card.name, "RIGHT", 5, 0)
     card.detail = Text(card, 10, DETAIL_X, -6); card.detail:SetTextColor(.7, .7, .7)
@@ -120,7 +130,7 @@ function A:Draw()
     if not f then return end
     local query = f.search:GetText():lower()
     local shown = {}
-    for _, row in ipairs(self.rows) do if Matches(row, query) then shown[#shown + 1] = row end end
+    for _, row in ipairs(self.rows) do if Matches(row, query, self.factionFilter or "All") then shown[#shown + 1] = row end end
     local width = math.max(300, f.content:GetWidth())
     for i, row in ipairs(shown) do
         local card = f.cards[i] or Card(f, i)
@@ -132,9 +142,10 @@ function A:Draw()
         card.name:SetWidth(0); card.name:SetText(tostring(row.name))
         if card.name:GetStringWidth() > DETAIL_X - NAME_X - 70 then card.name:SetWidth(DETAIL_X - NAME_X - 70) end
         if row.online then card.name:SetTextColor(.95, .95, .95) else card.name:SetTextColor(.6, .6, .6) end
-        local tag = row.role and ("|cffffd100" .. row.role .. "|r") or ""
-        if row.battleTag and not row.named and not row.isSelf and row.source ~= "friend" then tag = tag .. (tag ~= "" and " " or "") .. "|cff808080no name|r" end
-        card.tag:SetText(tag)
+        card.tag:SetText(row.role and ("|cffffd100" .. row.role .. "|r") or "")
+        local known = row.faction == "Alliance" or row.faction == "Horde"
+        card.faction:SetShown(known)
+        if known then card.faction:SetAtlas(row.faction == "Horde" and "communities-icon-faction-horde" or "communities-icon-faction-alliance") end
         card.detail:SetWidth(math.max(60, width - DETAIL_X - 95)); card.detail:SetText(row.detail or "")
         card.status:SetText(A.StatusLabel(row)); card.status:SetTextColor(c[1], c[2], c[3])
         card:Show()
@@ -169,10 +180,22 @@ function A:BuildWindow()
     self.window = f
     local top = self.embedded and -8 or -50
     f.search = CreateFrame("EditBox", nil, f, "InputBoxTemplate")
-    f.search:SetPoint("TOPLEFT", 18, top); f.search:SetSize(220, 22); f.search:SetAutoFocus(false)
-    local placeholder = Text(f.search, 11, 2, -5, 200); placeholder:SetText("Search names..."); placeholder:SetTextColor(.55, .55, .55)
+    f.search:SetPoint("TOPLEFT", 18, top); f.search:SetSize(180, 22); f.search:SetAutoFocus(false)
+    local placeholder = Text(f.search, 11, 2, -5, 170); placeholder:SetText("Search names..."); placeholder:SetTextColor(.55, .55, .55)
     f.search:SetScript("OnTextChanged", function(box) placeholder:SetShown(box:GetText() == ""); A:Draw() end)
     f.search:SetScript("OnEscapePressed", function(box) box:ClearFocus() end)
+    -- Faction filter.
+    self.factionFilter = self.factionFilter or "All"
+    local menu = CreateFrame("DropdownButton", nil, f, "WowStyle1DropdownTemplate")
+    menu:SetPoint("LEFT", f.search, "RIGHT", 12, 0); menu:SetWidth(130)
+    menu:SetDefaultText("All factions")
+    menu:SetupMenu(function(_, root)
+        for _, value in ipairs({ "All", "Alliance", "Horde" }) do
+            root:CreateRadio(value == "All" and "All factions" or value,
+                function() return A.factionFilter == value end,
+                function() A.factionFilter = value; A:Draw() end)
+        end
+    end)
     local settings = Button(f, "Settings", 90, function() A.Settings:Open() end)
     settings:SetPoint("TOPRIGHT", f, "TOPRIGHT", -12, top + 1)
     local refresh = Button(f, "Refresh", 80, function() A:Refresh(); A:Draw() end)

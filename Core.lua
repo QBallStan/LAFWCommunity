@@ -71,7 +71,6 @@ function A:Refresh()
                 row.character = info.name
                 row.detail = table.concat({ info.classID and GetClassInfo(info.classID) or "",
                     info.level and ("Level " .. info.level) or "" }, " "):match("^%s*(.-)%s*$")
-                row.named = true
             end
             if row.online then online = online + 1 end
             self.rows[#self.rows + 1] = row
@@ -85,43 +84,50 @@ function A:Refresh()
     self.status = ("%d members, %d online"):format(#self.rows, online)
 end
 
--- A Blizzard Group member: the name they chose (their note), and for you and
--- your Battle.net friends the character being played and where.
+-- A Blizzard Group member: the character they're playing (the game says,
+-- for every online member), or the last one seen while they're offline,
+-- and every character seen for them.
 function A:FillBattleNetRow(row, info, clubId)
     local BN = self.BN
     row.battleTag = info.name
-    local shown, source, character = nil, nil, nil
-    if BN:Settings().enabled then shown, source, character = BN:Resolve(info.bnetAccountId, info.name, clubId, info) end
+    local shown, source = nil, nil
+    if BN:Settings().enabled then shown, source = BN:Resolve(info.bnetAccountId, info.name, clubId, info) end
     if shown then row.name = shown end
-    row.named = source == "note"
     row.source = source
+    row.chars = self.Seen:Characters(clubId, row.memberId)
     if row.isSelf then
         local _, classFile = UnitClass("player")
-        row.character = BN.PlayerName()
-        row.detail = (row.character or "") .. " - " .. (ClassName(classFile) or "") .. " " .. (UnitLevel("player") or "")
+        row.detail = (ClassName(classFile) or "") .. " " .. (UnitLevel("player") or "")
+        local zone = GetRealZoneText and GetRealZoneText()
+        if zone and zone ~= "" then row.detail = row.detail .. ", " .. zone end
+        row.faction = UnitFactionGroup("player")
         row.where = "forever"
         return
     end
-    -- Battle.net friends: what they're playing, and an invite when it's Forever.
-    local friend = BN:FriendInfo(info.bnetAccountId, info.name)
-    local game = type(friend) == "table" and friend.gameAccountInfo
     row.where = BN:FriendWhere(info.bnetAccountId, info.name)
-    if row.where == "forever" and type(game) == "table" then
-        row.character = character
+    local game = BN:GameCharacter(info.bnetAccountId, info.name)
+    if game then
         local bits = {}
-        if game.className then bits[#bits + 1] = game.className .. (game.characterLevel and (" " .. game.characterLevel) or "") end
-        if game.areaName and game.areaName ~= "" then bits[#bits + 1] = game.areaName end
-        row.detail = (character or "?") .. (#bits > 0 and (" - " .. table.concat(bits, ", ")) or "")
-        row.realm = game.realmDisplayName
-        row.faction = game.factionName
+        if game.className then bits[#bits + 1] = game.className .. (game.level and (" " .. game.level) or "") end
+        if game.zone then bits[#bits + 1] = game.zone end
+        row.detail = table.concat(bits, ", ")
+        row.realm, row.faction = game.realm, game.faction
         if game.gameAccountID then row.invite = { gameAccountID = game.gameAccountID } end
-    elseif row.where == "elsewhere" and row.online then
-        row.detail = "In another game"
+        return
+    end
+    if row.where == "elsewhere" and row.online then row.detail = "In another game" end
+    -- Not in Forever right now: what we saw last.
+    local last, at = self.Seen:Last(clubId, row.memberId)
+    if last then
+        row.faction = last.faction
+        local what = (last.className or ClassName(last.class) or "") .. (last.level and (" " .. last.level) or "")
+        if not row.detail then row.detail = (what ~= "" and (what .. " - ") or "") .. "last seen " .. A.Ago(at) end
+        row.lastSeen = at
     end
 end
 
--- Invite a member: a Battle.net friend in Forever through Battle.net; in a
--- character community, by character name.
+-- Invite a member: someone in a Blizzard Group playing Forever through
+-- Battle.net; in a character community, by character name.
 function A:InviteRow(row)
     if not row then return end
     if row.invite and row.invite.gameAccountID and BNInviteFriend then
@@ -137,7 +143,7 @@ function A:CanInvite(row)
     if not row.online then return false, "Offline" end
     if row.invite then return true end
     if not row.battleTag then return row.character ~= nil end
-    return false, "Only Battle.net friends playing Forever can be invited from here"
+    return false, "Not playing Forever right now"
 end
 
 -- Statuses change: repaint the open roster now and then.
@@ -149,7 +155,7 @@ if C_Timer and C_Timer.NewTicker then
     end)
 end
 
--- Names changed (a setting, someone's note): repaint the Communities member
+-- Names changed (a setting, a member's character): repaint the Communities member
 -- list and the roster. Bursts repaint once.
 local repaintPending
 function A:NamesChanged()
@@ -172,7 +178,7 @@ events:SetScript("OnEvent", function(_, event, name)
         A.db = LAFWCommunityDB
         A.db.schemaVersion = 2
         -- Left over from 0.x: characters, mains, other members' data, the
-        -- data channel. Display names come from member notes now.
+        -- data channel.
         A.db.me, A.db.peers, A.db.professions, A.db.data, A.db.diagnostics = nil, nil, nil, nil, nil
         SLASH_LAFWCOMMUNITY1 = "/lafw"
         SlashCmdList.LAFWCOMMUNITY = function(command)

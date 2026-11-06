@@ -68,7 +68,7 @@ function M:Create()
             GameTooltip:AddDoubleLine(tostring(m.name), m.status ~= "Online" and m.status or "", 1, 1, 1, c[1], c[2], c[3])
         end
         GameTooltip:AddLine(" ")
-        GameTooltip:AddLine("|cffffd100Left-click|r settings and your name", 1, 1, 1)
+        GameTooltip:AddLine("|cffffd100Left-click|r settings", 1, 1, 1)
         GameTooltip:AddLine("|cffffd100Right-click|r roster", 1, 1, 1)
         GameTooltip:AddLine("|cffffd100Drag|r to move", 1, 1, 1)
         GameTooltip:Show()

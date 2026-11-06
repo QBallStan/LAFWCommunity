@@ -35,19 +35,20 @@ function A:Test()
             if type(info) == "table" then
                 total = total + 1
                 local shown, source = self.BN:Resolve(info.bnetAccountId, info.name, id, info)
-                if source == "note" then named = named + 1 end
+                if shown then named = named + 1 end
                 local line = ("  %s%s: %s%s, %s"):format(tostring(info.name), info.isSelf == true and " (you)" or "",
                     shown and ('"' .. shown .. '"') or "BattleTag kept", source and (" (" .. source .. ")") or "",
                     self.Presence.StatusText(info.presence))
                 Say(line)
-                test.members[#test.members + 1] = { note = Describe(info.memberNote), shown = shown, source = source,
+                test.members[#test.members + 1] = { shown = shown, source = source,
                     presence = Describe(info.presence), self = info.isSelf == true }
             end
         end
-        Say(("Group: %d members, %d with a name in their note"):format(total, named))
+        Say(("Group: %d members, %d shown by character"):format(total, named))
     end
-    local note = self.Settings:CurrentNote()
-    Say("Your note: " .. (note and ('"' .. note .. '"') or "|cffffd100none|r (set it from the settings window)"))
+    local known = 0
+    for _ in pairs(self.db.seen or {}) do known = known + 1 end
+    Say(("Characters remembered for %d member(s)"):format(known))
 
     local P = self.Presence
     Say(("Alerts: %s; status updates %d, alerts shown %d, subscribed %d time(s)"):format(

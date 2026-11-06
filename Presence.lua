@@ -3,10 +3,9 @@
 -- members' notices), and the list behind the minimap button's tooltip.
 --
 -- The game tells addons each member's status (online, away, busy, on the
--- Battle.net mobile app, offline) for one group at a time, and the
--- Communities window takes that over while it's open: the addon asks again
--- for its group when the window closes. Members' notes changing (new names)
--- also land here.
+-- Battle.net mobile app, offline) and the characters they play for one
+-- group at a time, and the Communities window takes that over while it's
+-- open: the addon asks again for its group when the window closes.
 -------------------------------------------------------------------------------
 local _, A = ...
 local P = {}
@@ -58,7 +57,11 @@ function P:Snapshot(alert)
     if not id then return end
     for _, memberId in ipairs(Call(C_Club.GetClubMembers, id) or {}) do
         local info = Call(C_Club.GetMemberInfo, id, memberId)
-        if type(info) == "table" and not Secret(info.presence) then self:Saw(info, info.presence, alert) end
+        if type(info) == "table" then
+            -- Learn the character each online member is playing (A.Seen).
+            pcall(A.BN.Resolve, A.BN, info.bnetAccountId, info.name, id, info)
+            if not Secret(info.presence) then self:Saw(info, info.presence, alert) end
+        end
     end
 end
 

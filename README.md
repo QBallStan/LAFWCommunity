@@ -2,17 +2,20 @@
 
 The Love At First Wipe community addon for **World of Warcraft: Forever**.
 
-Our community is a Blizzard Group, so both factions and every server can be in it. Blizzard Groups show everyone by BattleTag; this addon shows the name each member chose instead, and a few things that make the group feel more like a guild.
+Our community is a Blizzard Group, so both factions and every server can be in it. Blizzard Groups show everyone by BattleTag; this addon shows the character each member is playing instead, and a few things that make the group feel more like a guild.
 
 ## What it does
 
-- **Your chosen name instead of your BattleTag**, in the group chat, the Communities member list and the LAFW tab. The name is your **member note** in the group, so everyone with the addon sees it, whatever their server or faction.
-- **Battle.net friends** who haven't set a name show by the character they're playing.
-- **Login and logout alerts** in chat, like guild members': "Pallydude has come online."
-- **The LAFW tab** in the Communities window: everyone's name and status (online, away, busy, on the Battle.net app, offline). For your Battle.net friends also what they're playing and where, and right-click to invite them.
+- **Character names instead of BattleTags**, in the group chat, the Communities member list and the LAFW tab. The game tells the addon which character every online member is playing, on any server or faction, and nobody needs to set anything up.
+- **Offline members** show by the last character you saw them on.
+- **Their characters:** hover a member in the LAFW tab to see every character the addon has seen them play.
+- **The LAFW tab** in the Communities window: everyone's character, class, level, zone, faction and status (online, away, busy, on the Battle.net app, in another game, offline), a faction filter, and right-click to invite someone playing Forever.
+- **Login and logout alerts** in chat, like guild members': "Pally Dude has come online."
 - **Who's online** when you hover the minimap button.
 - **`/l` talks in the group**, like `/p` for party. The group chat is added to your General chat tab the first time; remove it there if you prefer (right-click the tab > Settings > Channels).
 - **Its own chat color**, picked so it doesn't look like whispers or any other chat. Change it in the settings.
+
+The addon learns members' characters as it sees them, while you're both online, so their character lists fill up as you play.
 
 ## Install
 
@@ -22,14 +25,9 @@ Our community is a Blizzard Group, so both factions and every server can be in i
 
 To update, do the same with the newest release: replace the old `LAFWCommunity` folder.
 
-## Set your name (once)
+## In game
 
-1. Click the **book button on your minimap**. Under *Your name in the group*, type the name you want (your main's name is a good choice) and press **Ctrl+C**.
-2. In the Communities window, right-click **your own name** in the member list > **Set Note**, paste with **Ctrl+V** and accept.
-
-That's it: everyone running the addon now sees you by that name. The game doesn't let addons set the note for you, which is why it's a copy and paste.
-
-Right-click the minimap button to open the roster.
+Click the **book button on your minimap** for the settings (names, alerts, the minimap button, the group chat and its color). Right-click it for the roster, or open the **LAFW** tab in the Communities window.
 
 ## Commands
 

@@ -1,13 +1,11 @@
 -------------------------------------------------------------------------------
--- Display names in Blizzard Groups.
+-- Character names in Blizzard Groups.
 --
 -- A Blizzard Group (a Battle.net community) shows each member by BattleTag.
--- This shows instead:
---   * the member's own member note, as the name they chose (works whatever
---     their server or faction: the group keeps the note);
---   * otherwise, for your Battle.net friends, the character they're playing;
---   * otherwise, for you, your current character.
--- Anyone else keeps their BattleTag. Only the shown text changes: clicking
+-- The game tells addons which character each online member is playing
+-- (not only Battle.net friends), so this shows that character instead;
+-- offline members show by the last character the addon saw them on.
+-- Anyone never seen keeps their BattleTag. Only the shown text changes: clicking
 -- the name still whispers or opens the menu for the right person.
 -------------------------------------------------------------------------------
 local _, A = ...
@@ -239,51 +237,56 @@ function BN:Member(clubId, bnetAccountID, battleTag)
     return byName
 end
 
--- A member's display name: their member note in the group, which only they
--- can set (right-click your name in the Communities window > Set Note). The
--- whole note is the name; "Main: X" (what 0.9 asked for) gives X.
--- Escape codes and control characters are dropped, and it's cut to 40
--- characters.
-local MAX_NAME = 40
-function BN.ParseNote(note)
-    note = Str(note)
-    if not note then return nil end
-    note = note:gsub("|[cC]%x%x%x%x%x%x%x%x", ""):gsub("|[rR]", ""):gsub("||", "|"):gsub("|", ""):gsub("%c", " ")
-    note = note:match("^%s*(.-)%s*$")
-    note = note:match("^[Mm]ain%s*:%s*(.-)$") or note
-    if note == "" then return nil end
-    -- Cut on a whole UTF-8 character.
-    local count, cut = 0, #note
-    for pos in note:gmatch("()[^\128-\191]") do
-        count = count + 1
-        if count > MAX_NAME then cut = pos - 1; break end
-    end
-    note = note:sub(1, cut):match("^(.-)%s*$")
-    return note ~= "" and note or nil
+-- The character a member is playing, as the game reports it, when it's
+-- Forever: { name, classFile, className, level, faction, realm, zone,
+-- gameAccountID }. nil when they're offline, elsewhere, or unknown.
+function BN:GameCharacter(bnetAccountID, battleTag)
+    if self:FriendWhere(bnetAccountID, battleTag) ~= "forever" then return nil end
+    local info = self:FriendInfo(bnetAccountID, battleTag)
+    local game = type(info) == "table" and info.gameAccountInfo
+    if type(game) ~= "table" then return nil end
+    local name = FromFriendAccount(info)
+    if not name then return nil end
+    return { name = name, classFile = Str(game.classFilename), className = Str(game.className),
+        level = Num(game.characterLevel), faction = Str(game.factionName), realm = Str(game.realmDisplayName),
+        zone = Str(game.areaName), gameAccountID = Num(game.gameAccountID) }
 end
 
 -- What to show for a member instead of their BattleTag, and where it came
--- from: their note ("note"), your own character when you have no note
--- ("self"), a Battle.net friend's character ("friend"). Also returns the
--- character a friend (or you) is playing, for tooltips. nil: keep the
--- BattleTag.
+-- from: you ("self"), the character the game says they're playing
+-- ("game"), or for someone offline the last character this addon saw them
+-- on ("seen"). Also returns the character's name. nil: keep the BattleTag.
+-- Every character seen is remembered (A.Seen), for the alts in tooltips
+-- and for naming members while they're offline.
 function BN:Resolve(bnetAccountID, battleTag, clubId, member)
     local selfID, selfTag = self:Self()
     bnetAccountID = Num(bnetAccountID)
     member = member or self:Member(clubId, bnetAccountID, battleTag)
+    local memberId = member and Num(member.memberId)
     local isSelf = member and Safe(member.isSelf) == true
     if not isSelf then isSelf = (bnetAccountID and selfID and bnetAccountID == selfID) end
     if not isSelf and selfTag and battleTag then isSelf = SameTag(selfTag, battleTag) end
-    local noteName = BN.ParseNote(member and member.memberNote)
+    local Seen = A.Seen
     if isSelf then
         local char = BN.PlayerName()
-        if noteName then return noteName, "note", char end
-        if char then return self:Shown(char), "self", char end
-        return nil
+        if not char then return nil end
+        if Seen and clubId and memberId then
+            local _, classFile = UnitClass("player")
+            Seen:Record(clubId, memberId, { name = char, classFile = classFile, className = (UnitClass("player")),
+                level = UnitLevel("player"), faction = UnitFactionGroup("player"), realm = GetRealmName() })
+        end
+        return self:Shown(char), "self", char
     end
+    local game = self:GameCharacter(bnetAccountID, battleTag)
+    if game then
+        if Seen and clubId and memberId then Seen:Record(clubId, memberId, game) end
+        return self:Shown(game.name), "game", game.name
+    end
+    -- In another WoW version: the game still names the character.
     local char = self:FriendCharacter(bnetAccountID, battleTag)
-    if noteName then return noteName, "note", char end
-    if char then return self:Shown(char), "friend", char end
+    if char then return self:Shown(char), "game", char end
+    local last = Seen and clubId and memberId and Seen:Last(clubId, memberId)
+    if last then return self:Shown(last.name), "seen", last.name end
 end
 
 -------------------------------------------------------------------------------

@@ -1,10 +1,6 @@
 -------------------------------------------------------------------------------
--- The settings window (minimap button, /lafw settings): names, alerts, the
--- community chat, and your display name in the group.
---
--- Your display name is your member note in the group. Only Blizzard's own
--- menu can set it (the game blocks addons from it), so the window prepares
--- the text and shows how to paste it.
+-- The settings window (minimap button, /lafw settings): names, alerts and
+-- the community chat.
 -------------------------------------------------------------------------------
 local _, A = ...
 local S = {}
@@ -49,9 +45,9 @@ local function Heading(parent, y, label)
 end
 
 -------------------------------------------------------------------------------
--- Your display name
+-- The group
 -------------------------------------------------------------------------------
--- The group your name applies to: the community chat's group, when it's a
+-- The group the addon follows: the community chat's group, when it's a
 -- Blizzard Group.
 function S:GroupId()
     local id = A.CommunityChat and A.CommunityChat:ClubId()
@@ -61,19 +57,6 @@ function S:GroupId()
     end
 end
 
--- Your member note in that group, as it is now.
-function S:CurrentNote()
-    local id = self:GroupId()
-    if not id or not (C_Club and C_Club.GetMemberInfoForSelf) then return nil end
-    local ok, me = pcall(C_Club.GetMemberInfoForSelf, id)
-    if ok and type(me) == "table" and type(me.memberNote) == "string" and me.memberNote ~= "" then return me.memberNote end
-end
-
--- What to offer in the box: your note if you have one, else your character.
-function S:Suggested()
-    return A.BN.ParseNote(self:CurrentNote()) or A.BN.PlayerName() or UnitName("player")
-end
-
 -------------------------------------------------------------------------------
 -- The window
 -------------------------------------------------------------------------------
@@ -81,7 +64,7 @@ function S:Open()
     if self.window then self.window:Show(); self:Render(); return end
     local f = CreateFrame("Frame", "LAFWCommunitySettings", UIParent, "BasicFrameTemplateWithInset")
     self.window = f
-    f:SetSize(W, 520); f:SetPoint("CENTER"); f:SetFrameStrata("DIALOG")
+    f:SetSize(W, 360); f:SetPoint("CENTER"); f:SetFrameStrata("DIALOG")
     f.TitleText:SetText("LAFW Community")
     f:SetMovable(true); f:EnableMouse(true); f:RegisterForDrag("LeftButton")
     f:SetScript("OnDragStart", f.StartMoving); f:SetScript("OnDragStop", f.StopMovingOrSizing)
@@ -89,49 +72,31 @@ function S:Open()
     f:SetScript("OnShow", function() S:Render() end)
     tinsert(UISpecialFrames, "LAFWCommunitySettings")   -- Escape closes it
 
-    -- Your name
-    Heading(f, -34, "Your name in the group")
-    f.noteState = Text(f, "GameFontHighlight", 20, -58, W - 40)
-    f.noteState:SetWordWrap(false)
-    local box = CreateFrame("EditBox", nil, f, "InputBoxTemplate")
-    box:SetSize(260, 22); box:SetPoint("TOPLEFT", 26, -80); box:SetAutoFocus(false); box:SetMaxLetters(40)
-    box:SetScript("OnEditFocusGained", function(self) self:HighlightText() end)
-    box:SetScript("OnEnterPressed", function(self) self:HighlightText() end)
-    box:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-    f.nameBox = box
-    local select = PanelButton(f, "Select to copy", 120, function() box:SetFocus(); box:HighlightText() end)
-    select:SetPoint("LEFT", box, "RIGHT", 10, 0)
-    local nameHelp = Text(f, "GameFontHighlightSmall", 20, -108, W - 40)
-    nameHelp:SetText("Everyone in the group sees you by the name in your member note, whatever their server or faction."
-        .. " Type the name you want, press Ctrl+C, then in the Communities window right-click your own name > Set Note"
-        .. " and paste it (Ctrl+V). The game doesn't let addons set it for you.")
-    nameHelp:SetTextColor(.75, .75, .75)
-
     -- Names and alerts
     local cfg = function() return A.BN:Settings() end
-    Heading(f, -170, "Display")
+    Heading(f, -34, "Display")
     f.checks = {
-        Check(f, 16, -190, "Show names instead of BattleTags",
-            "Members show by the name in their member note; Battle.net friends without one by the character they're playing.",
+        Check(f, 16, -54, "Show names instead of BattleTags",
+            "Members show by the character they're playing; offline members by the last character you saw them on.",
             function() return cfg().enabled end, function(on) cfg().enabled = on end),
-        Check(f, 16, -216, "Also show the BattleTag",
+        Check(f, 16, -80, "Also show the BattleTag",
             "Adds the BattleTag after the name, e.g. \"Aldren (Aldie)\".",
             function() return cfg().showTag end, function(on) cfg().showTag = on end),
-        Check(f, 16, -242, "First names only for characters",
-            "\"Aldren\" instead of \"Aldren Brightwater\" when a friend (or you) shows by character. Names from notes show as written.",
+        Check(f, 16, -106, "First names only",
+            "\"Aldren\" instead of \"Aldren Brightwater\".",
             function() return cfg().firstOnly end, function(on) cfg().firstOnly = on end),
-        Check(f, 16, -268, "Tell me when members come online or go offline",
+        Check(f, 16, -132, "Tell me when members come online or go offline",
             "A line in chat, like guild members' login notices.",
             function() return A.db.alerts ~= false end, function(on) A.db.alerts = on end),
-        Check(f, 16, -294, "Show the minimap button",
+        Check(f, 16, -158, "Show the minimap button",
             "You can always open this window with /lafw settings.",
             function() return not (A.db.minimap and A.db.minimap.hide) end,
             function(on) if A.Minimap then A.Minimap:SetShown(on) end end),
     }
 
     -- Community chat
-    Heading(f, -330, "Community chat")
-    f.clubLabel = Text(f, "GameFontHighlight", 20, -354, 330)
+    Heading(f, -194, "Community chat")
+    f.clubLabel = Text(f, "GameFontHighlight", 20, -218, 330)
     f.clubLabel:SetWordWrap(false)
     local change = PanelButton(f, "Change", 90, function()
         -- Step to the next community you're in.
@@ -145,10 +110,10 @@ function S:Open()
         if A.Presence then A.Presence:Subscribe() end
         S:Render()
     end)
-    change:SetPoint("TOPRIGHT", f, "TOPRIGHT", -18, -348)
+    change:SetPoint("TOPRIGHT", f, "TOPRIGHT", -18, -212)
     -- The community chat color: click the swatch for the game's color
     -- picker; Default goes back to the addon's color.
-    local colorLabel = Text(f, "GameFontHighlight", 20, -384)
+    local colorLabel = Text(f, "GameFontHighlight", 20, -248)
     colorLabel:SetText("Color")
     local swatch = CreateFrame("Button", nil, f)
     swatch:SetSize(20, 20); swatch:SetPoint("LEFT", colorLabel, "RIGHT", 10, 0)
@@ -208,8 +173,8 @@ function S:Open()
         A:ApplyCommunityColor(nil)
         S:Render()
     end)
-    f.colorDefault:SetPoint("TOPRIGHT", f, "TOPRIGHT", -18, -378)
-    local chatHelp = Text(f, "GameFontHighlightSmall", 20, -410, W - 40)
+    f.colorDefault:SetPoint("TOPRIGHT", f, "TOPRIGHT", -18, -242)
+    local chatHelp = Text(f, "GameFontHighlightSmall", 20, -274, W - 40)
     chatHelp:SetText("Type /l to talk in it, like /p for party. It's added to your General chat tab once;"
         .. " to remove it, right-click the tab > Settings > Channels.")
     chatHelp:SetTextColor(.75, .75, .75)
@@ -229,15 +194,6 @@ function S:Render()
     local f = self.window
     if not f or not f:IsShown() then return end
     for _, b in ipairs(f.checks) do b:SetChecked(b.Get() and true or false) end
-    local note = A.BN.ParseNote(self:CurrentNote())
-    if not self:GroupId() then
-        f.noteState:SetText("|cff9a9a9aYou're not in a Blizzard Group.|r")
-    elseif note then
-        f.noteState:SetText("Others see you as |cff33cc80" .. note .. "|r")
-    else
-        f.noteState:SetText("|cffffd100No name set yet:|r others see your BattleTag.")
-    end
-    if not f.nameBox:HasFocus() then f.nameBox:SetText(self:Suggested() or "") end
     local clubName = A.CommunityChat and A.CommunityChat:ClubName()
     f.clubLabel:SetText("Community: " .. (clubName and ("|cffffffff" .. clubName .. "|r") or "|cff9a9a9anone yet|r"))
     if A.CommunityColor then
