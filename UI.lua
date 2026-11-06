@@ -53,12 +53,13 @@ local function Matches(row, query, faction)
     return text:lower():find(query, 1, true) ~= nil
 end
 
--- Right-click on a member: Whisper (Battle.net, any faction) and, for your
--- own faction, Invite to group; greyed out with the reason when it can't
+-- Right-click on a member: for your own faction Whisper (the character)
+-- and Invite to group, and for anyone a Battle.net whisper; greyed out with the reason when it can't
 -- be done from here.
 function A:RowMenu(owner, row)
     if row.isSelf then return end
     local canWhisper, whisperWhy = self:CanWhisper(row)
+    local canBNet, bnetWhy = self:CanWhisperBNet(row)
     local canInvite, inviteWhy = self:CanInvite(row)
     local sameFaction = self:SameFaction(row)
     if MenuUtil and MenuUtil.CreateContextMenu then
@@ -71,12 +72,15 @@ function A:RowMenu(owner, row)
                     if why and b.SetTooltip then b:SetTooltip(function(tip) GameTooltip_SetTitle(tip, why) end) end
                 end
             end
-            Add(WHISPER or "Whisper", canWhisper, whisperWhy, function() A:WhisperRow(row) end)
+            if sameFaction then Add(WHISPER or "Whisper", canWhisper, whisperWhy, function() A:WhisperRow(row) end) end
+            if row.battleTag then Add("Battle.net whisper", canBNet, bnetWhy, function() A:WhisperBNetRow(row) end) end
             -- Invites only make sense within your faction.
             if sameFaction then Add(INVITE or "Invite to group", canInvite, inviteWhy, function() A:InviteRow(row) end) end
         end)
     elseif canWhisper then
         self:WhisperRow(row)
+    elseif canBNet then
+        self:WhisperBNetRow(row)
     end
 end
 
@@ -110,7 +114,7 @@ local function Tooltip(card)
     end
     if row.battleTag and A.BN:Settings().showTag ~= true then GameTooltip:AddLine("BattleTag: " .. row.battleTag, .65, .65, .65) end
     if A:CanInvite(row) then GameTooltip:AddLine("Right-click to whisper or invite", .5, .8, 1)
-    elseif A:CanWhisper(row) then GameTooltip:AddLine("Right-click to whisper", .5, .8, 1) end
+    elseif A:CanWhisper(row) or A:CanWhisperBNet(row) then GameTooltip:AddLine("Right-click to whisper", .5, .8, 1) end
     GameTooltip:Show()
 end
 

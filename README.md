@@ -9,7 +9,7 @@ Our community is a Blizzard Group, so both factions and every server can be in i
 - **Character names instead of BattleTags**, in the group chat, the Communities member list and the LAFW tab. The game tells the addon which character every online member is playing, on any server or faction, and nobody needs to set anything up.
 - **Offline members** show by the character you've seen them play the most.
 - **Their characters:** hover a member in the LAFW tab to see every character the addon has seen them play.
-- **The LAFW tab** in the Communities window: everyone's character, class, level, zone, faction and status (online, away, busy, on the Battle.net app, in another game, offline), a faction filter, and right-click to whisper someone (any faction) or invite them (your faction).
+- **The LAFW tab** in the Communities window: everyone's character, class, level, zone, faction and status (online, away, busy, on the Battle.net app, in another game, offline), a faction filter, and right-click to whisper or invite someone of your faction, or send a Battle.net whisper to anyone.
 - **Login and logout alerts** in chat, like guild members': "Pally Dude has come online."
 - **Who's online** when you hover the minimap button.
 - **`/l` talks in the group**, like `/p` for party. The group chat is added to your General chat tab the first time; remove it there if you prefer (right-click the tab > Settings > Channels).

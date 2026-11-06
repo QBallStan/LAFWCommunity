@@ -113,6 +113,11 @@ function A:FillBattleNetRow(row, info, clubId)
         row.detail = table.concat(bits, ", ")
         row.realm, row.faction = game.realm, game.faction
         if game.gameAccountID then row.invite = { gameAccountID = game.gameAccountID } end
+        -- Whisper the character: its name, with the server when it's another.
+        if game.rawName then
+            local mine = GetNormalizedRealmName and GetNormalizedRealmName()
+            row.tellTarget = (game.realmName and game.realmName ~= mine) and (game.rawName .. "-" .. game.realmName) or game.rawName
+        end
         return
     end
     if row.where == "elsewhere" and row.online then row.detail = "In another game" end
@@ -128,21 +133,45 @@ function A:FillBattleNetRow(row, info, clubId)
     end
 end
 
--- Whisper a member: Battle.net whispers reach them whatever their faction.
+-- Whisper a member's character (your own faction: the game doesn't carry
+-- whispers across factions), or their Battle.net account (anyone online).
 function A:CanWhisper(row)
     if not row or row.isSelf then return false end
     if not row.online then return false, "Offline" end
+    if row.battleTag and not row.tellTarget then return false, "Not playing Forever right now" end
+    if not self:SameFaction(row) then return false, "Other faction: use the Battle.net whisper" end
     return true
+end
+function A:CanWhisperBNet(row)
+    if not row or row.isSelf or not row.battleTag then return false end
+    if not row.online then return false, "Offline" end
+    return true
+end
+-- Opens the chat box on a whisper to `target`, without going through "/w"
+-- (character names here can have spaces).
+local function OpenTell(target, chatType)
+    local box = ChatFrameUtil and ChatFrameUtil.ChooseBoxForSend and ChatFrameUtil.ChooseBoxForSend()
+        or (ChatEdit_ChooseBoxForSend and ChatEdit_ChooseBoxForSend())
+    if not box then return end
+    -- As Blizzard's own Battle.net whisper does (ChatFrameUtil.SendBNetTell).
+    box:SetTellTarget(target)
+    box:SetChatType(chatType)
+    local active = ChatFrameUtil and ChatFrameUtil.GetActiveWindow and ChatFrameUtil.GetActiveWindow()
+    if box ~= active and ChatFrameUtil and ChatFrameUtil.OpenChat then ChatFrameUtil.OpenChat("")
+    elseif box.UpdateHeader then box:UpdateHeader() end
 end
 function A:WhisperRow(row)
     if not self:CanWhisper(row) then return end
-    if row.battleTag then
-        local send = (ChatFrameUtil and ChatFrameUtil.SendBNetTell) or ChatFrame_SendBNetTell
-        if send then pcall(send, row.battleTag) end
+    if row.tellTarget then pcall(OpenTell, row.tellTarget, "WHISPER")
     elseif row.character then
         local send = (ChatFrameUtil and ChatFrameUtil.SendTell) or ChatFrame_SendTell
         if send then pcall(send, row.character) end
     end
+end
+function A:WhisperBNetRow(row)
+    if not self:CanWhisperBNet(row) then return end
+    local send = (ChatFrameUtil and ChatFrameUtil.SendBNetTell) or ChatFrame_SendBNetTell
+    if send then pcall(send, row.battleTag) end
 end
 
 -- Invite a member: someone in a Blizzard Group playing Forever through

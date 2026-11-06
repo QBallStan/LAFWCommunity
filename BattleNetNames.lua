@@ -249,7 +249,8 @@ function BN:GameCharacter(bnetAccountID, battleTag)
     if not name then return nil end
     return { name = name, classFile = Str(game.classFilename), className = Str(game.className),
         level = Num(game.characterLevel), faction = Str(game.factionName), realm = Str(game.realmDisplayName),
-        zone = Str(game.areaName), gameAccountID = Num(game.gameAccountID) }
+        zone = Str(game.areaName), gameAccountID = Num(game.gameAccountID),
+        rawName = Str(game.characterName), realmName = Str(game.realmName) }
 end
 
 -- What to show for a member instead of their BattleTag, and where it came

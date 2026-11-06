@@ -2,7 +2,7 @@
 ## Title: LAFW Community
 ## Notes: Love At First Wipe: character names instead of BattleTags in Blizzard Groups, their characters, who's online, and /l for the group chat.
 ## Author: Love At First Wipe
-## Version: 1.3.0
+## Version: 1.3.1
 ## SavedVariables: LAFWCommunityDB
 Core.lua
 UI.lua
