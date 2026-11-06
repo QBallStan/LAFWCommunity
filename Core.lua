@@ -128,6 +128,23 @@ function A:FillBattleNetRow(row, info, clubId)
     end
 end
 
+-- Whisper a member: Battle.net whispers reach them whatever their faction.
+function A:CanWhisper(row)
+    if not row or row.isSelf then return false end
+    if not row.online then return false, "Offline" end
+    return true
+end
+function A:WhisperRow(row)
+    if not self:CanWhisper(row) then return end
+    if row.battleTag then
+        local send = (ChatFrameUtil and ChatFrameUtil.SendBNetTell) or ChatFrame_SendBNetTell
+        if send then pcall(send, row.battleTag) end
+    elseif row.character then
+        local send = (ChatFrameUtil and ChatFrameUtil.SendTell) or ChatFrame_SendTell
+        if send then pcall(send, row.character) end
+    end
+end
+
 -- Invite a member: someone in a Blizzard Group playing Forever through
 -- Battle.net; in a character community, by character name.
 function A:InviteRow(row)
@@ -139,10 +156,16 @@ function A:InviteRow(row)
         if fn then pcall(fn, row.character) end
     end
 end
+-- Only your own faction can be invited.
+function A:SameFaction(row)
+    local mine = UnitFactionGroup("player")
+    return not row.battleTag or (row.faction ~= nil and row.faction == mine)
+end
 function A:CanInvite(row)
     if not row then return false end
     if row.isSelf then return false, "That's you" end
     if not row.online then return false, "Offline" end
+    if not self:SameFaction(row) then return false, "Other faction" end
     if row.invite then return true end
     if not row.battleTag then return row.character ~= nil end
     return false, "Not playing Forever right now"

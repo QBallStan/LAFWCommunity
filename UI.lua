@@ -53,23 +53,30 @@ local function Matches(row, query, faction)
     return text:lower():find(query, 1, true) ~= nil
 end
 
--- Right-click on a member: a small menu (Invite to group), greyed out with
--- the reason when they can't be invited from here.
+-- Right-click on a member: Whisper (Battle.net, any faction) and, for your
+-- own faction, Invite to group; greyed out with the reason when it can't
+-- be done from here.
 function A:RowMenu(owner, row)
-    local ok, why = self:CanInvite(row)
+    if row.isSelf then return end
+    local canWhisper, whisperWhy = self:CanWhisper(row)
+    local canInvite, inviteWhy = self:CanInvite(row)
+    local sameFaction = self:SameFaction(row)
     if MenuUtil and MenuUtil.CreateContextMenu then
         MenuUtil.CreateContextMenu(owner, function(_, root)
             root:CreateTitle(tostring(row.name or ""))
-            local b = root:CreateButton(INVITE or "Invite to group", function() A:InviteRow(row) end)
-            if not ok then
-                b:SetEnabled(false)
-                if why and b.SetTooltip then b:SetTooltip(function(tip) GameTooltip_SetTitle(tip, why) end) end
+            local function Add(label, ok, why, action)
+                local b = root:CreateButton(label, action)
+                if not ok then
+                    b:SetEnabled(false)
+                    if why and b.SetTooltip then b:SetTooltip(function(tip) GameTooltip_SetTitle(tip, why) end) end
+                end
             end
+            Add(WHISPER or "Whisper", canWhisper, whisperWhy, function() A:WhisperRow(row) end)
+            -- Invites only make sense within your faction.
+            if sameFaction then Add(INVITE or "Invite to group", canInvite, inviteWhy, function() A:InviteRow(row) end) end
         end)
-    elseif ok then
-        self:InviteRow(row)
-    elseif why then
-        self:Message(why)
+    elseif canWhisper then
+        self:WhisperRow(row)
     end
 end
 
@@ -102,7 +109,8 @@ local function Tooltip(card)
         end
     end
     if row.battleTag and A.BN:Settings().showTag ~= true then GameTooltip:AddLine("BattleTag: " .. row.battleTag, .65, .65, .65) end
-    if A:CanInvite(row) then GameTooltip:AddLine("Right-click to invite", .5, .8, 1) end
+    if A:CanInvite(row) then GameTooltip:AddLine("Right-click to whisper or invite", .5, .8, 1)
+    elseif A:CanWhisper(row) then GameTooltip:AddLine("Right-click to whisper", .5, .8, 1) end
     GameTooltip:Show()
 end
 
