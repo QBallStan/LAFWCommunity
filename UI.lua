@@ -76,6 +76,11 @@ function A:RowMenu(owner, row)
             if row.battleTag then Add("Battle.net whisper", canBNet, bnetWhy, function() A:WhisperBNetRow(row) end) end
             -- Invites only make sense within your faction.
             if sameFaction then Add(INVITE or "Invite to group", canInvite, inviteWhy, function() A:InviteRow(row) end) end
+            -- With the Guild Invite Menu addon: invite them to your guild (asks first).
+            local GIM = _G.GuildInviteMenu
+            if sameFaction and row.online and row.tellTarget and GIM and GIM.CanInviteName and GIM.CanInviteName(row.tellTarget) then
+                Add("Invite to Guild", true, nil, function() GIM.Confirm(row.tellTarget, tostring(row.name)) end)
+            end
         end)
     elseif canWhisper then
         self:WhisperRow(row)
