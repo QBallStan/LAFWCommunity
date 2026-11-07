@@ -64,7 +64,7 @@ function S:Open()
     if self.window then self.window:Show(); self:Render(); return end
     local f = CreateFrame("Frame", "LAFWCommunitySettings", UIParent, "BasicFrameTemplateWithInset")
     self.window = f
-    f:SetSize(W, 360); f:SetPoint("CENTER"); f:SetFrameStrata("DIALOG")
+    f:SetSize(W, 330); f:SetPoint("CENTER"); f:SetFrameStrata("DIALOG")
     f.TitleText:SetText("LAFW Community")
     f:SetMovable(true); f:EnableMouse(true); f:RegisterForDrag("LeftButton")
     f:SetScript("OnDragStart", f.StartMoving); f:SetScript("OnDragStop", f.StopMovingOrSizing)
@@ -111,70 +111,7 @@ function S:Open()
         S:Render()
     end)
     change:SetPoint("TOPRIGHT", f, "TOPRIGHT", -18, -212)
-    -- The community chat color: click the swatch for the game's color
-    -- picker; Default goes back to the addon's color.
-    local colorLabel = Text(f, "GameFontHighlight", 20, -248)
-    colorLabel:SetText("Color")
-    local swatch = CreateFrame("Button", nil, f)
-    swatch:SetSize(20, 20); swatch:SetPoint("LEFT", colorLabel, "RIGHT", 10, 0)
-    local border = swatch:CreateTexture(nil, "BACKGROUND"); border:SetAllPoints(); border:SetColorTexture(.75, .75, .75, 1)
-    local fill = swatch:CreateTexture(nil, "ARTWORK")
-    fill:SetPoint("TOPLEFT", 1, -1); fill:SetPoint("BOTTOMRIGHT", -1, 1); fill:SetColorTexture(1, 1, 1, 1)
-    swatch.fill = fill
-    f.swatch = swatch
-    f.colorNote = Text(f, "GameFontHighlightSmall", 0, 0)
-    f.colorNote:ClearAllPoints(); f.colorNote:SetPoint("LEFT", swatch, "RIGHT", 8, 0)
-    f.colorNote:SetTextColor(.75, .75, .75)
-    local function SetColor(r, g, b)
-        A.db.chatColor = { r, g, b }
-        A:ApplyCommunityColor(A.db.chatColor)
-        S:Render()
-    end
-    swatch:SetScript("OnClick", function()
-        local c = A:CommunityColor()
-        local before = { c[1], c[2], c[3] }
-        local hadOwn = A.db.chatColor ~= nil
-        local picker = ColorPickerFrame
-        if not picker and C_AddOns and C_AddOns.LoadAddOn then
-            pcall(C_AddOns.LoadAddOn, "Blizzard_ColorPicker")
-            picker = ColorPickerFrame
-        end
-        if not picker then A:Message("The game's color picker isn't available."); return end
-        local function Current() return picker:GetColorRGB() end
-        local function Cancel()
-            if hadOwn then SetColor(before[1], before[2], before[3])
-            else A.db.chatColor = nil; A:ApplyCommunityColor(nil); S:Render() end
-        end
-        if picker.SetupColorPickerAndShow then
-            picker:SetupColorPickerAndShow({ r = c[1], g = c[2], b = c[3], hasOpacity = false,
-                swatchFunc = function() SetColor(Current()) end, cancelFunc = Cancel })
-        else
-            picker.hasOpacity = false
-            picker.func = function() SetColor(Current()) end
-            picker.cancelFunc = Cancel
-            picker.previousValues = before
-            picker:SetColorRGB(c[1], c[2], c[3])
-            ShowUIPanel(picker)
-        end
-        -- Our window sits on the same layer as the picker and would hide it.
-        if picker.SetFrameStrata then picker:SetFrameStrata("FULLSCREEN_DIALOG") end
-        if picker.Raise then picker:Raise() end
-    end)
-    swatch:SetScript("OnEnter", function(self)
-        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:SetText("Community chat color", 1, 1, 1)
-        GameTooltip:AddLine("Click to choose. You can also change it in Blizzard's chat settings"
-            .. " (right-click a chat tab > Settings > Channels); the addon keeps whichever you set last.", nil, nil, nil, true)
-        GameTooltip:Show()
-    end)
-    swatch:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    f.colorDefault = PanelButton(f, "Default", 90, function()
-        A.db.chatColor = nil
-        A:ApplyCommunityColor(nil)
-        S:Render()
-    end)
-    f.colorDefault:SetPoint("TOPRIGHT", f, "TOPRIGHT", -18, -242)
-    local chatHelp = Text(f, "GameFontHighlightSmall", 20, -274, W - 40)
+    local chatHelp = Text(f, "GameFontHighlightSmall", 20, -244, W - 40)
     chatHelp:SetText("Type /l to talk in it, like /p for party. It's added to your General chat tab once;"
         .. " to remove it, right-click the tab > Settings > Channels.")
     chatHelp:SetTextColor(.75, .75, .75)
@@ -196,11 +133,4 @@ function S:Render()
     for _, b in ipairs(f.checks) do b:SetChecked(b.Get() and true or false) end
     local clubName = A.CommunityChat and A.CommunityChat:ClubName()
     f.clubLabel:SetText("Community: " .. (clubName and ("|cffffffff" .. clubName .. "|r") or "|cff9a9a9anone yet|r"))
-    if A.CommunityColor then
-        local c = A:CommunityColor()
-        f.swatch.fill:SetColorTexture(c[1], c[2], c[3], 1)
-        local own = A.db.chatColor ~= nil
-        f.colorNote:SetText(own and "your color" or "default")
-        f.colorDefault:SetEnabled(own)
-    end
 end

@@ -13,7 +13,6 @@ Our community is a Blizzard Group, so both factions and every server can be in i
 - **Login and logout alerts** in chat, like guild members': "Pally Dude has come online."
 - **Who's online** when you hover the minimap button.
 - **`/l` talks in the group**, like `/p` for party. The group chat is added to your General chat tab the first time; remove it there if you prefer (right-click the tab > Settings > Channels).
-- **Its own chat color**, picked so it doesn't look like whispers or any other chat. Change it in the settings.
 
 The addon learns members' characters as it sees them, while you're both online, so their character lists fill up as you play.
 
@@ -27,7 +26,7 @@ To update, do the same with the newest release: replace the old `LAFWCommunity` 
 
 ## In game
 
-Click the **book button on your minimap** for the settings (names, alerts, the minimap button, the group chat and its color). Right-click it for the roster, or open the **LAFW** tab in the Communities window.
+Click the **book button on your minimap** for the settings (names, alerts, the minimap button, the group chat). Right-click it for the roster, or open the **LAFW** tab in the Communities window.
 
 ## Commands
 

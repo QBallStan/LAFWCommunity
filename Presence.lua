@@ -75,7 +75,8 @@ function P:Saw(info, presence, alert)
     if was == now then return end
     if not alert or A.db.alerts == false or (self.quietUntil and GetTime() < self.quietUntil) then return end
     local name = A.BN:NameFor(info.bnetAccountId, info.name, self.clubId, info) or info.name or "?"
-    local c = A.CommunityColor and A:CommunityColor() or { 1, 1, 0 }
+    local c = ChatTypeInfo and ChatTypeInfo.SYSTEM or { r = 1, g = 1, b = 0 }
+    c = { c.r or 1, c.g or 1, c.b or 0 }
     DEFAULT_CHAT_FRAME:AddMessage(("%s has %s."):format(name, now and "come online" or "gone offline"), c[1], c[2], c[3])
     self.stats.alerts = self.stats.alerts + 1
     if A.window and A.window:IsShown() then A:NamesChanged() end
