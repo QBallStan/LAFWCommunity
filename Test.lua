@@ -46,9 +46,7 @@ function A:Test()
         end
         Say(("Group: %d members, %d shown by character"):format(total, named))
     end
-    local known = 0
-    for _ in pairs(self.db.seen or {}) do known = known + 1 end
-    Say(("Characters remembered for %d member(s)"):format(known))
+    Say(("Characters remembered for %d player(s)"):format(self.Seen:Count()))
 
     local P = self.Presence
     Say(("Alerts: %s; status updates %d, alerts shown %d, subscribed %d time(s)"):format(
