@@ -161,9 +161,16 @@ end
 
 -- Typing "/l " swaps in "/<number> " so the game switches the chat box to
 -- the community at once, exactly like "/p ".
+--
+-- On OnChar (a key you typed), never OnTextChanged: the game's own chat code
+-- changes the box's text too (when you type "/p ", when you send), and an
+-- addon's OnTextChanged hook then runs inside that code, so what the game
+-- writes after it (the chat type to keep for your next message) is no longer
+-- written by the game alone. That made /p not stick (Nov 10). OnChar only
+-- comes from the keyboard.
 local swapping
-local function OnTextChanged(editBox, userInput)
-    if swapping or not userInput then return end
+local function OnChar(editBox)
+    if swapping then return end
     local text = editBox:GetText()
     if type(text) ~= "string" then return end
     local rest = text:match("^/[lL] (.*)$")
@@ -185,7 +192,7 @@ function CC:InstallSlash()
     SlashCmdList.LAFWCOMMUNITYCHAT = function(msg, editBox) CC:Send(msg, editBox) end
     for i = 1, (NUM_CHAT_WINDOWS or 10) do
         local box = _G["ChatFrame" .. i .. "EditBox"]
-        if box and box.HookScript then box:HookScript("OnTextChanged", OnTextChanged) end
+        if box and box.HookScript then box:HookScript("OnChar", OnChar) end
     end
 end
 
