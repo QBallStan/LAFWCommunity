@@ -94,8 +94,8 @@ function S:Open()
             function(on) if A.Minimap then A.Minimap:SetShown(on) end end),
     }
 
-    -- Community chat
-    Heading(f, -194, "Community chat")
+    -- The community the addon follows
+    Heading(f, -194, "Community")
     f.clubLabel = Text(f, "GameFontHighlight", 20, -218, 330)
     f.clubLabel:SetWordWrap(false)
     local change = PanelButton(f, "Change", 90, function()
@@ -106,14 +106,12 @@ function S:Open()
         local nextIndex = 1
         for i, c in ipairs(clubs) do if c.clubId == current then nextIndex = i % #clubs + 1 end end
         A.db.chatClubId = clubs[nextIndex].clubId
-        CC:AddToGeneralTab()
         if A.Presence then A.Presence:Subscribe() end
         S:Render()
     end)
     change:SetPoint("TOPRIGHT", f, "TOPRIGHT", -18, -212)
     local chatHelp = Text(f, "GameFontHighlightSmall", 20, -244, W - 40)
-    chatHelp:SetText("Type /l to talk in it, like /p for party. It's added to your General chat tab once;"
-        .. " to remove it, right-click the tab > Settings > Channels.")
+    chatHelp:SetText("The Blizzard Group the addon follows: its names, roster and login alerts.")
     chatHelp:SetTextColor(.75, .75, .75)
 
     local roster = PanelButton(f, "Open roster", 110, function() f:Hide(); A:Toggle() end)

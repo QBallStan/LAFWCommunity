@@ -55,9 +55,7 @@ function A:Test()
     Say(("Member list: %s, %d rows renamed; chat names: %d of %d renamed"):format(
         self.BN.memberListHooked and "hooked" or (CommunitiesFrame and "not hooked" or "not loaded yet"),
         s.memberRows, s.renamed, s.bnLinkCalls + s.playerLinkCalls))
-    local CC = self.CommunityChat
-    Say(("Community chat: %s, channel %s; /l %s"):format(tostring(CC:ClubName() or "none"),
-        tostring(CC:ChannelNumber(false) or "not joined"), CC.stats.slashTaken and "|cffff6060also claimed by another addon|r" or "ready"))
+    Say(("Community: %s"):format(tostring(self.CommunityChat:ClubName() or "none")))
     test.lines = out
     self.db.test = test
     Say("Saved. Type /reload so it's written to disk.")
