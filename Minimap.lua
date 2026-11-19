@@ -65,7 +65,7 @@ function M:Create()
         for i, m in ipairs(online) do
             if i > 25 then GameTooltip:AddLine(("and %d more"):format(#online - 25), .65, .65, .65); break end
             local c = A.StatusColor and A.StatusColor({ online = true, presence = m.presence }) or { 1, 1, 1 }
-            GameTooltip:AddDoubleLine(tostring(m.name), m.status ~= "Online" and m.status or "", 1, 1, 1, c[1], c[2], c[3])
+            GameTooltip:AddDoubleLine(type(m.name) == "string" and m.name or "?", m.status ~= "Online" and m.status or "", 1, 1, 1, c[1], c[2], c[3])
         end
         GameTooltip:AddLine(" ")
         GameTooltip:AddLine("|cffffd100Left-click|r settings", 1, 1, 1)

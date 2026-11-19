@@ -94,7 +94,7 @@ function P:Online()
                 status = P.StatusText(info.presence), presence = info.presence, isSelf = info.isSelf == true }
         end
     end
-    table.sort(list, function(a, b) return tostring(a.name) < tostring(b.name) end)
+    table.sort(list, function(a, b) return A.SortKey(a.name) < A.SortKey(b.name) end)
     return list
 end
 

@@ -14,13 +14,27 @@ local function Call(fn, ...)
 end
 local function Secret(v) return issecretvalue and v ~= nil and issecretvalue(v) end
 
+-- A name to sort by. In battlegrounds and other restricted places the game
+-- hides community and member names from addons (secret values), and
+-- comparing one errors (Nov 19): hidden names sort last, as they are.
+function A.SortKey(v)
+    if type(v) == "string" and not Secret(v) then return v:lower() end
+    return "\255"
+end
+local function ByName(a, b)
+    local ka, kb = A.SortKey(a.name), A.SortKey(b.name)
+    if ka ~= kb then return ka < kb end
+    return (a.clubId or 0) < (b.clubId or 0)
+end
+A.ByName = ByName
+
 function A:Communities()
     local clubs = Call(C_Club and C_Club.GetSubscribedClubs) or {}
     local result = {}
     for _, club in ipairs(clubs) do
         if club.clubId then result[#result + 1] = club end
     end
-    table.sort(result, function(a, b) return (a.name or "") < (b.name or "") end)
+    table.sort(result, ByName)
     return result
 end
 
@@ -79,7 +93,7 @@ function A:Refresh()
     -- Online first, then by name.
     table.sort(self.rows, function(a, b)
         if a.online ~= b.online then return a.online end
-        return tostring(a.name):lower() < tostring(b.name):lower()
+        return A.SortKey(a.name) < A.SortKey(b.name)
     end)
     self.status = ("%d members, %d online"):format(#self.rows, online)
 end

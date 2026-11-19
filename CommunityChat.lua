@@ -24,7 +24,7 @@ function CC:Clubs()
     local list = Call(C_Club and C_Club.GetSubscribedClubs) or {}
     local out = {}
     for _, club in ipairs(list) do if club.clubId then out[#out + 1] = club end end
-    table.sort(out, function(a, b) return (a.name or "") < (b.name or "") end)
+    table.sort(out, A.ByName)   -- hidden (secret) names allowed: Core.lua
     return out
 end
 
@@ -43,5 +43,8 @@ end
 
 function CC:ClubName()
     local id = self:ClubId()
-    for _, c in ipairs(self:Clubs()) do if c.clubId == id then return c.name end end
+    -- nil where the game hides the name (battlegrounds): callers show "none".
+    for _, c in ipairs(self:Clubs()) do
+        if c.clubId == id then return A.SortKey(c.name) ~= "\255" and c.name or nil end
+    end
 end
